@@ -7,8 +7,11 @@ let state = null;
 let operatingState = { locked: true, reasons: ["Data has not loaded"], ageHours: null };
 
 const titles = {
-  command: ["Today", "Start here. These files need a decision."],
+  command: ["Today", "Seven actions for today—each with an owner and finish line."],
   pipeline: ["All Files", "Every file currently shown on the dashboard."],
+  actions: ["File Advice", "A concrete next move for every file."],
+  strategy: ["Company Strategy", "What AFG should change, test, and finish next."],
+  board: ["Advisory Board", "Three independent AI decision lenses on today's company facts."],
   intelligence: ["All Decisions", "Open the evidence, decide what is true, and record the result."],
   sources: ["Data Sources", "See which systems are working and what each one provides."],
 };
@@ -67,6 +70,8 @@ const decisionReason = item => {
   if (status) return "Two pieces of information in Drive do not agree.";
   return "Two folders may belong to the same deal.";
 };
+const actionStateLabel = value => ({ DECIDE: "Decide", VERIFY_FIRST: "Verify first", QUALIFY: "Qualify", SCREEN: "Screen", REENGAGE: "Re-engage", DO_NOT_CONTACT: "Do not contact" }[value] || value);
+const actionTone = value => ({ DECIDE: "critical", VERIFY_FIRST: "critical", QUALIFY: "high", SCREEN: "medium", REENGAGE: "medium", DO_NOT_CONTACT: "muted" }[value] || "medium");
 
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active-view", node.id === view));
@@ -94,6 +99,25 @@ function decisionCard(item) {
   return `<article class="decision-card"><div class="priority-body"><div class="priority-top"><div><span class="plain-label">${escapeHtml(decisionLabel(item))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(item.severity)}">${escapeHtml(urgencyLabel(item.severity))}</span></div><p class="decision-question"><strong>Check this:</strong> ${escapeHtml(decisionQuestion(item))}</p><div class="card-actions primary-action"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div><p class="simple-reason"><strong>Why:</strong> ${escapeHtml(decisionReason(item))}</p><details class="evidence-details"><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`;
 }
 
+function advisoryLenses(item) {
+  const lenses = item.advisoryLenses || {};
+  return `<div class="mini-board"><article><strong>Capital discipline</strong><p>${escapeHtml(lenses.capitalDiscipline || "Not available")}</p></article><article><strong>Product simplicity</strong><p>${escapeHtml(lenses.productSimplicity || "Not available")}</p></article><article><strong>First-principles scale</strong><p>${escapeHtml(lenses.firstPrinciplesScale || "Not available")}</p></article></div>`;
+}
+
+function messageBlock(item) {
+  if (!item.message) return "";
+  const followUps = (item.message.followUps || []).map(step => `<li><strong>${escapeHtml(step.when)}:</strong> ${escapeHtml(step.text)}</li>`).join("");
+  return `<details class="message-block"><summary>Message and follow-up campaign</summary><p><strong>Contact found in Drive:</strong> ${escapeHtml(item.contactEmail || "No email found")}</p><div class="roleplay"><span>Recipient's likely reaction</span><p>${escapeHtml(item.message.roleplay)}</p></div><p class="record-warning">${escapeHtml(item.message.guard)}</p><p><strong>Initial message</strong></p><pre>${escapeHtml(item.message.draft)}</pre>${followUps ? `<p><strong>If there is no reply</strong></p><ol class="cadence-list">${followUps}</ol>` : ""}</details>`;
+}
+
+function actionCard(item, compact = false) {
+  const order = item.order ? `<span class="action-number">${escapeHtml(item.order)}</span>` : "";
+  const steps = compact ? "" : `<details><summary>Show the three steps</summary><ol>${(item.steps || []).map(step => `<li>${escapeHtml(step)}</li>`).join("")}</ol></details>`;
+  const board = compact ? "" : `<details><summary>Advisory board on this file</summary>${advisoryLenses(item)}</details>`;
+  const message = compact ? "" : messageBlock(item);
+  return `<article class="action-card ${escapeHtml(actionTone(item.actionState))}"><div class="action-heading">${order}<div><span class="plain-label">${escapeHtml(actionStateLabel(item.actionState))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(actionTone(item.actionState))}">${escapeHtml(item.due)}</span></div><p class="action-main">${escapeHtml(item.action)}</p><div class="owner-row"><span><strong>Owner:</strong> ${escapeHtml(item.owner)}</span><span><strong>Product:</strong> ${escapeHtml(item.instrument)}</span></div><p><strong>Why:</strong> ${escapeHtml(item.why)}</p><p class="finish-line"><strong>Done when:</strong> ${escapeHtml(item.finishLine)}</p><div class="card-actions"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a>${compact ? `<button class="secondary" data-advice="${escapeHtml(item.dealId)}">View full advice</button>` : ""}</div>${steps}${message}${board}</article>`;
+}
+
 function renderCommand() {
   const source = state.source;
   $("#freshness").className = `health-pill ${operatingState.locked ? "bad" : "ok"}`;
@@ -110,15 +134,18 @@ function renderCommand() {
     metric("Files shown", operatingState.locked ? "—" : String(state.visibleFolderCount), "Files included on this dashboard", "navy"),
     metric("Changed in 24 hours", operatingState.locked ? "—" : String(state.changedInLast24Hours), "A Drive file changed; this may not be a client reply", "green"),
   ].join("");
+  $("#today-plan").innerHTML = operatingState.locked
+    ? `<div class="empty danger">Today's actions are hidden until current information is available.</div>`
+    : state.todayPlan.items.map(item => actionCard(item, true)).join("") || `<div class="empty success">No approved action is available today.</div>`;
   $("#priority-list").innerHTML = operatingState.locked
     ? `<div class="empty danger">Today's list is hidden until current information is available.</div>`
-    : state.decisionQueue.items.slice(0, 5).map(decisionCard).join("") || `<div class="empty success">Nothing needs a decision right now.</div>`;
+    : state.decisionQueue.items.slice(0, 2).map(decisionCard).join("") || `<div class="empty success">Nothing needs a decision right now.</div>`;
   $("#decision-count-note").textContent = operatingState.locked ? "Unavailable" : `View all ${state.decisionQueue.total} decisions`;
 }
 
 function dealCard(deal) {
   const warnings = [deal.duplicateOf ? "Possible duplicate" : null, deal.duplicateReason || deal.duplicateReviewReason ? "Duplicate check needed" : null, deal.evidenceReadErrorCount ? "A file could not be read" : null].filter(Boolean);
-  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))}</p></div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>Changed ${deal.daysSinceUpdate} days ago</span></div>${warnings.length ? `<p class="warning">${escapeHtml([...new Set(warnings)].join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-deal="${escapeHtml(deal.id)}">View dashboard details</button><a href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div></article>`;
+  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))}</p></div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>Changed ${deal.daysSinceUpdate} days ago</span></div>${warnings.length ? `<p class="warning">${escapeHtml([...new Set(warnings)].join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-advice="${escapeHtml(deal.id)}">View advice</button><button class="secondary" data-deal="${escapeHtml(deal.id)}">View details</button><a href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open Drive</a></div></article>`;
 }
 
 function renderDeals() {
@@ -132,6 +159,37 @@ function renderDeals() {
   const filter = $("#status-filter").value;
   const deals = state.deals.filter(deal => (!term || deal.name.toLowerCase().includes(term)) && (filter === "all" || deal.status === filter));
   $("#deal-list").innerHTML = deals.map(dealCard).join("") || `<div class="empty">No matching files.</div>`;
+}
+
+function renderFileAdvice() {
+  if (operatingState.locked) {
+    $("#advice-search").disabled = true;
+    $("#action-filter").disabled = true;
+    $("#file-advice-list").innerHTML = `<div class="empty danger">File advice is hidden because the information is not current.</div>`;
+    return;
+  }
+  const term = $("#advice-search").value.trim().toLowerCase();
+  const filter = $("#action-filter").value;
+  const items = state.fileAdvice.filter(item => (!term || item.name.toLowerCase().includes(term)) && (filter === "all" || item.actionState === filter));
+  $("#file-advice-list").innerHTML = items.map(item => actionCard(item)).join("") || `<div class="empty">No matching file advice.</div>`;
+}
+
+function renderStrategy() {
+  if (operatingState.locked) {
+    $("#company-strategy").innerHTML = `<div class="empty danger">Strategy is hidden because the information is not current.</div>`;
+    $("#blue-ocean").innerHTML = "";
+    return;
+  }
+  $("#company-strategy").innerHTML = `<section class="panel"><div class="panel-head"><div><p class="eyebrow">COMPANY DIRECTION</p><h2>Five operating priorities</h2></div></div>${state.companyStrategy.priorities.map((item, index) => `<article class="strategy-card"><span class="action-number">${index + 1}</span><div><h3>${escapeHtml(item.title)}</h3><p class="strategy-metric">${escapeHtml(item.metric)}</p><p><strong>Do:</strong> ${escapeHtml(item.action)}</p><p><strong>Why:</strong> ${escapeHtml(item.why)}</p><div class="owner-row"><span><strong>Owner:</strong> ${escapeHtml(item.owner)}</span><span><strong>Due:</strong> ${escapeHtml(item.due)}</span></div><p class="finish-line"><strong>Done when:</strong> ${escapeHtml(item.finishLine)}</p></div></article>`).join("")}</section>`;
+  $("#blue-ocean").innerHTML = state.blueOcean.map(item => `<article class="opportunity-card"><span class="test-badge">${escapeHtml(item.status)}</span><h3>${escapeHtml(item.title)}</h3><p><strong>Signal:</strong> ${escapeHtml(item.evidence)}</p><p><strong>Idea:</strong> ${escapeHtml(item.hypothesis)}</p><p><strong>Test:</strong> ${escapeHtml(item.test)}</p><p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p></article>`).join("");
+}
+
+function renderBoard() {
+  if (operatingState.locked) {
+    $("#advisory-board").innerHTML = `<div class="empty danger">Advisory-board output is hidden because the information is not current.</div>`;
+    return;
+  }
+  $("#advisory-board").innerHTML = `<p class="board-assurance">${escapeHtml(state.advisoryBoard.assurance)}</p><article class="board-synthesis"><h2>What AFG should do</h2><p><strong>They agree:</strong> ${escapeHtml(state.advisoryBoard.synthesis.agreement)}</p><p><strong>They disagree:</strong> ${escapeHtml(state.advisoryBoard.synthesis.disagreement)}</p><p class="finish-line"><strong>AFG decision:</strong> ${escapeHtml(state.advisoryBoard.synthesis.afgDecision)}</p></article>${state.advisoryBoard.cards.map(item => `<article class="advisor-card"><div class="advisor-head"><div><p class="eyebrow">${escapeHtml(item.name)}</p><h2>${escapeHtml(item.headline)}</h2></div><span class="status ${item.status === "model_generated" ? "medium" : "high"}">${item.status === "model_generated" ? "Independent AI review" : "Rule-based fallback"}</span></div><p class="advisor-lens">${escapeHtml(item.lens)}</p><p><strong>Advice:</strong> ${escapeHtml(item.advice)}</p><p><strong>Why now:</strong> ${escapeHtml(item.why)}</p><div class="advisor-action"><strong>Do today</strong><p>${escapeHtml(item.todayAction)}</p></div><p><strong>Measure:</strong> ${escapeHtml(item.metric)}</p><p><strong>Challenge:</strong> ${escapeHtml(item.challenge)}</p><small>${escapeHtml(item.disclaimer)}${item.model ? ` Model: ${escapeHtml(item.model)}.` : ""}</small></article>`).join("")}`;
 }
 
 function renderIntelligence() {
@@ -167,10 +225,20 @@ function wire() {
   $$(`[data-view]`).forEach(node => node.addEventListener("click", () => showView(node.dataset.view)));
   $("#deal-search").addEventListener("input", renderDeals);
   $("#status-filter").addEventListener("change", renderDeals);
+  $("#advice-search").addEventListener("input", renderFileAdvice);
+  $("#action-filter").addEventListener("change", renderFileAdvice);
   $("#dialog-close").addEventListener("click", () => $("#detail-dialog").close());
   document.addEventListener("click", event => {
     const detail = event.target.closest("[data-deal]");
     if (detail) showDetail(detail.dataset.deal);
+    const advice = event.target.closest("[data-advice]");
+    if (advice) {
+      const item = state.fileAdvice.find(record => record.dealId === advice.dataset.advice);
+      $("#advice-search").value = item?.name || "";
+      $("#action-filter").value = "all";
+      renderFileAdvice();
+      showView("actions");
+    }
   });
 }
 
@@ -184,7 +252,7 @@ async function unlock(password) {
     $("#access-key").value = "";
     $("#unlock").classList.add("hidden");
     $("#app").classList.remove("hidden");
-    renderCommand(); renderDeals(); renderIntelligence(); renderSources(); wire();
+    renderCommand(); renderDeals(); renderFileAdvice(); renderStrategy(); renderBoard(); renderIntelligence(); renderSources(); wire();
   } catch {
     history.replaceState(null, "", `${location.pathname}${location.search}`);
     $("#access-key").value = "";

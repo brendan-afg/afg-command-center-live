@@ -67,3 +67,25 @@ details.security-warning p{margin:7px 0 0;font-size:13px}
 .dialog-close{min-width:56px;min-height:44px;border-radius:10px;background:#f2f4f7;font-size:14px;font-weight:800;color:var(--navy)}
 .security-source{border-color:#f2b8b5;background:#fff8f7}
 @media(max-width:760px){#decision-count-note{max-width:128px;line-height:1.2}.dialog-close{right:10px;top:10px}}
+
+/* Action and strategy operating layer */
+.action-list,.strategy-list,.board-grid,.opportunity-grid{display:grid;gap:14px}
+.action-card{background:#fff;border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:16px;padding:18px;box-shadow:0 4px 18px rgba(9,30,66,.04)}
+.action-card.critical{border-left-color:var(--red)}.action-card.high{border-left-color:#d98b00}.action-card.muted{border-left-color:#98a2b3;background:#fafafa}
+.action-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start}.action-heading h3{margin:4px 0 0;font-size:19px}.action-number{width:34px;height:34px;border-radius:10px;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:900}
+.action-main{font-size:17px;font-weight:800;color:var(--ink)!important;line-height:1.4}.owner-row{display:flex;gap:18px;flex-wrap:wrap;color:#344054;font-size:13px}.finish-line{padding:11px 13px;border-radius:10px;background:#edf8f3;color:#05603a!important}.action-card details{margin-top:12px}.action-card ol{padding-left:22px;color:#344054}.action-card li{margin:8px 0;line-height:1.45}
+.mini-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.mini-board article{border:1px solid var(--line);border-radius:11px;padding:12px;background:#f8fafc}.mini-board p{font-size:13px;margin:6px 0 0;line-height:1.45}
+.strategy-card{display:grid;grid-template-columns:auto 1fr;gap:14px;padding:17px 0;border-top:1px solid var(--line)}.strategy-card:first-of-type{border-top:0}.strategy-card h3,.opportunity-card h3,.advisor-card h2{margin:0 0 8px}.strategy-card p,.opportunity-card p,.advisor-card p{color:#475467;line-height:1.5}.strategy-metric{font-weight:800;color:var(--blue)!important}
+.opportunity-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.opportunity-card,.advisor-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:19px}.opportunity-card{border-top:4px solid #14a3a3}.test-badge{display:inline-flex;border-radius:999px;padding:5px 9px;background:#e7f8f7;color:#08726e;font-size:11px;font-weight:900;margin-bottom:12px}.source-link-button{margin-bottom:24px}
+.board-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.board-assurance{grid-column:1/-1;margin:0;padding:13px 15px;background:#edf4ff;color:#234f8d;border-radius:12px}.advisor-card{border-top:5px solid var(--navy)}.advisor-head{display:flex;justify-content:space-between;gap:12px}.advisor-head .status{white-space:normal;text-align:center}.advisor-lens{font-size:13px}.advisor-action{background:#edf4ff;border-radius:12px;padding:13px;margin:14px 0}.advisor-action p{margin:5px 0 0;color:var(--ink)}.advisor-card small{display:block;color:var(--muted);margin-top:14px;line-height:1.45}
+#all-advice-button{background:var(--blue);color:white;border:0;cursor:pointer;min-height:44px}
+@media(max-width:1100px){.board-grid,.opportunity-grid{grid-template-columns:1fr}.mini-board{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .bottom-nav{grid-template-columns:repeat(5,1fr)}.bottom-nav button{font-size:10.5px;padding:0 3px}
+  .action-card{padding:15px}.action-heading{grid-template-columns:auto minmax(0,1fr)}.action-heading .status{grid-column:2;margin-top:4px;width:max-content}.action-main{font-size:16px}.owner-row{display:grid;gap:5px}
+  .strategy-card{grid-template-columns:auto 1fr}.advisor-head{display:block}.advisor-head .status{margin:4px 0 10px}.opportunity-card,.advisor-card{padding:16px}
+  #all-advice-button{max-width:120px;line-height:1.2}
+}
+
+.board-synthesis{grid-column:1/-1;background:#fff;border:2px solid #b8ccec;border-radius:16px;padding:20px}.board-synthesis h2{margin:0 0 10px}.board-synthesis p{color:#475467;line-height:1.5}
+.cadence-list li{margin:10px 0;line-height:1.5}

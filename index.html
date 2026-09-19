@@ -32,6 +32,9 @@
       <nav id="nav" aria-label="Dashboard navigation">
         <button class="nav-item active" data-view="command">Today</button>
         <button class="nav-item" data-view="pipeline">All Files</button>
+        <button class="nav-item" data-view="actions">File Advice</button>
+        <button class="nav-item" data-view="strategy">Company Strategy</button>
+        <button class="nav-item" data-view="board">Advisory Board</button>
         <button class="nav-item" data-view="intelligence">All Decisions</button>
         <button class="nav-item" data-view="sources">Data Sources</button>
       </nav>
@@ -43,7 +46,7 @@
         <div>
           <p class="eyebrow">ALTFUNDS GLOBAL</p>
           <h1 id="page-title">Today</h1>
-          <p id="page-subtitle" class="muted">Start here. These files need a decision.</p>
+          <p id="page-subtitle" class="muted">Seven actions for today—each with an owner and finish line.</p>
         </div>
         <div id="freshness" class="health-pill">Loading</div>
       </header>
@@ -52,7 +55,14 @@
         <div id="source-banner" class="source-banner"></div>
         <section class="panel start-panel">
           <div class="panel-head">
-            <div><p class="eyebrow">START HERE</p><h2>Files that need your decision</h2></div>
+            <div><p class="eyebrow">DO THIS TODAY</p><h2>Your seven actions</h2></div>
+            <button id="all-advice-button" class="badge" data-view="actions">View every file</button>
+          </div>
+          <div id="today-plan" class="action-list"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">CLEAR THE BLOCKERS</p><h2>Files that need your decision</h2></div>
             <button id="decision-count-note" class="badge" data-view="intelligence">See all</button>
           </div>
           <div id="priority-list" class="priority-list"></div>
@@ -75,6 +85,33 @@
         <div id="deal-list" class="deal-list"></div>
       </section>
 
+      <section id="actions" class="view">
+        <div class="toolbar">
+          <input id="advice-search" type="search" placeholder="Search file advice" aria-label="Search file advice" />
+          <select id="action-filter" aria-label="Filter file advice">
+            <option value="all">All actions</option>
+            <option value="DECIDE">Decide</option>
+            <option value="VERIFY_FIRST">Verify first</option>
+            <option value="QUALIFY">Qualify</option>
+            <option value="SCREEN">Screen</option>
+            <option value="REENGAGE">Re-engage</option>
+            <option value="DO_NOT_CONTACT">Do not contact</option>
+          </select>
+        </div>
+        <div id="file-advice-list" class="action-list"></div>
+      </section>
+
+      <section id="strategy" class="view">
+        <div id="company-strategy" class="strategy-list"></div>
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">BLUE OCEAN</p><h2>New offers to test</h2></div></div><div id="blue-ocean" class="opportunity-grid"></div></section>
+        <button class="secondary source-link-button" data-view="sources">Check data sources and limits</button>
+      </section>
+
+      <section id="board" class="view">
+        <div class="source-banner simple-banner"><strong>Three AI decision lenses. These are simulations—not statements, advice, affiliations, or endorsements from the named people.</strong></div>
+        <div id="advisory-board" class="board-grid"></div>
+      </section>
+
       <section id="intelligence" class="view">
         <div class="source-banner simple-banner"><strong>Open a file, decide what is true, and record the result.</strong></div>
         <div id="intelligence-list" class="intelligence-list"></div>
@@ -88,8 +125,9 @@
     <nav class="bottom-nav" aria-label="Mobile dashboard navigation">
       <button class="active" data-view="command">Today</button>
       <button data-view="pipeline">Files</button>
-      <button data-view="intelligence">Decisions</button>
-      <button data-view="sources">Sources</button>
+      <button data-view="actions">Advice</button>
+      <button data-view="strategy">Strategy</button>
+      <button data-view="board">Board</button>
     </nav>
   </div>
 
