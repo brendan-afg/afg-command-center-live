@@ -1,15 +1,16 @@
 import { evaluateSnapshot } from "./snapshot-policy.js";
+import { safeDriveFolderUrl } from "./url-policy.js";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 let state = null;
-let operatingState = { locked: true, reasons: ["Snapshot not loaded"], ageHours: null };
+let operatingState = { locked: true, reasons: ["Data has not loaded"], ageHours: null };
 
 const titles = {
-  command: ["Command Center", "What requires a human decision today, with evidence and explicit limitations."],
-  pipeline: ["Evidence Inventory", "Every authenticated Drive folder, described as observed—not as an authoritative deal stage."],
-  intelligence: ["Decision Work", "Internal decision cards first; narrow exact-USD screening second. No recipient drafts."],
-  sources: ["Source Health", "Access, ingestion, join coverage, freshness, and known limitations by source."],
+  command: ["Today", "Start here. These files need a decision."],
+  pipeline: ["All Files", "Every file currently shown on the dashboard."],
+  intelligence: ["All Decisions", "Open the evidence, decide what is true, and record the result."],
+  sources: ["Data Sources", "See which systems are working and what each one provides."],
 };
 
 function bytes(base64) {
@@ -40,23 +41,32 @@ async function decrypt(envelope, privateFragmentKey) {
 }
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
-const safeDriveUrl = value => {
-  try {
-    const url = new URL(String(value));
-    return url.protocol === "https:" && ["drive.google.com", "docs.google.com"].includes(url.hostname) ? url.href : "#";
-  } catch {
-    return "#";
-  }
-};
-const formatDate = value => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }).format(new Date(value)) + " ET" : "Unavailable";
-const formatAmount = (amount, currency) => amount == null || !currency ? "Not extracted" : new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
+const safeDriveUrl = safeDriveFolderUrl;
+const formatDate = value => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }).format(new Date(value)) + " ET" : "Not available";
+const formatAmount = (amount, currency) => amount == null || !currency ? "No exact amount found" : new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
 const statusLabel = value => ({
-  active: "Uploads present — lifecycle unconfirmed",
-  intake_only: "Intake artifacts only — lifecycle unconfirmed",
-  needs_review: "Human decision required",
-  funded: "Funded marker detected",
-  closed: "Terminal marker detected",
-}[value] || value);
+  active: "Has documents — current status not confirmed",
+  intake_only: "New file — current status not confirmed",
+  needs_review: "Needs a decision",
+  funded: "A file says funded — not independently confirmed",
+  closed: "A file says closed",
+}[value] || "Status not confirmed");
+const decisionLabel = item => item.blockers.includes("status_or_amount") ? "The files disagree" : "Possible duplicate";
+const urgencyLabel = severity => severity === "critical" ? "Fix first" : severity === "high" ? "Check next" : "Review";
+const decisionQuestion = item => {
+  const status = item.blockers.includes("status_or_amount");
+  const duplicate = item.blockers.includes("duplicate_resolution");
+  if (status && duplicate) return "Is this the same deal as another file, and is it still open?";
+  if (status) return "What is the correct status or amount?";
+  return "Is this the same deal as another file?";
+};
+const decisionReason = item => {
+  const status = item.blockers.includes("status_or_amount");
+  const duplicate = item.blockers.includes("duplicate_resolution");
+  if (status && duplicate) return "The information does not agree, and another folder may be the same deal.";
+  if (status) return "Two pieces of information in Drive do not agree.";
+  return "Two folders may belong to the same deal.";
+};
 
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active-view", node.id === view));
@@ -76,74 +86,80 @@ function metric(label, value, note, tone = "blue") {
 }
 
 function evidenceBlock(evidence) {
-  if (!evidence) return `<div class="evidence"><strong>Evidence:</strong> No decision-level evidence excerpt is available in this snapshot. Verify in Drive.</div>`;
-  return `<div class="evidence"><strong>Evidence:</strong> ${escapeHtml(evidence.fileName)} · ${escapeHtml(formatDate(evidence.fileModifiedTime))}<br><span>${escapeHtml(evidence.excerpt || "No excerpt available")}</span><br><small>${escapeHtml(evidence.sourceKind || "Drive document; client attribution unverified")} · ${escapeHtml(evidence.confidence || "unknown confidence")}</small></div>`;
+  if (!evidence) return `<div class="evidence"><strong>What we found:</strong> No short evidence note is available. Open Drive to check the file.</div>`;
+  return `<div class="evidence"><strong>What we found:</strong> ${escapeHtml(evidence.fileName)} · ${escapeHtml(formatDate(evidence.fileModifiedTime))}<br><span>${escapeHtml(evidence.excerpt || "No note available")}</span></div>`;
 }
 
-function decisionCard(item, index) {
-  return `<article class="decision-card"><div class="rank">${index + 1}</div><div class="priority-body"><div class="priority-top"><h3>${escapeHtml(item.name)}</h3><span class="status ${escapeHtml(item.severity)}">${escapeHtml(item.type.replaceAll("_", " "))}</span></div><p><strong>Decision required:</strong> ${escapeHtml(item.decision)}</p><p><strong>Why:</strong> ${escapeHtml(item.why)}</p><div class="card-actions primary-action"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open evidence in Drive</a></div><p class="record-warning"><strong>No decision-recording system is connected.</strong> After verification, record the outcome, owner, and due date in AFG's authoritative workflow.</p><details class="evidence-details"><summary>Evidence, limits, and decision options</summary>${evidenceBlock(item.evidence)}<div class="decision-grid"><p><strong>Owner</strong><br>${escapeHtml(item.owner || "Unassigned")}</p><p><strong>Due</strong><br>${escapeHtml(item.due || "Not recorded")}</p><p><strong>Blocker</strong><br>${escapeHtml(item.blocker)}</p><p><strong>Permitted action</strong><br>${escapeHtml(item.authorizedAction)}</p></div><ul>${item.options.map(option => `<li>${escapeHtml(option)}</li>`).join("")}</ul></details></div></article>`;
+function decisionCard(item) {
+  return `<article class="decision-card"><div class="priority-body"><div class="priority-top"><div><span class="plain-label">${escapeHtml(decisionLabel(item))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(item.severity)}">${escapeHtml(urgencyLabel(item.severity))}</span></div><p class="decision-question"><strong>Check this:</strong> ${escapeHtml(decisionQuestion(item))}</p><div class="card-actions primary-action"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div><p class="simple-reason"><strong>Why:</strong> ${escapeHtml(decisionReason(item))}</p><details class="evidence-details"><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`;
 }
 
 function renderCommand() {
   const source = state.source;
   $("#freshness").className = `health-pill ${operatingState.locked ? "bad" : "ok"}`;
-  $("#freshness").textContent = operatingState.locked ? "STALE / LOCKED" : "Authenticated snapshot";
+  $("#freshness").textContent = operatingState.locked ? "Not current" : "Data updated today";
   $("#side-time").textContent = formatDate(state.generatedAt);
   $("#source-banner").className = `source-banner ${operatingState.locked ? "locked-banner" : ""}`;
   $("#source-banner").innerHTML = operatingState.locked
-    ? `<div><strong>STALE — DO NOT USE TOTALS OR PRIORITIES</strong><p>${operatingState.reasons.map(escapeHtml).join(" · ")}</p></div><div class="source-meta">Last artifact ${escapeHtml(formatDate(state.generatedAt))}</div>`
-    : `<div><strong>${escapeHtml(source.name)} · authenticated Drive API</strong><p>${source.scannedFolders} folders returned by the configured authenticated scope · ${source.failedFolderCount} folder failures · ${source.evidenceReadErrorCount} evidence failures</p>${state.securityWarnings?.length ? `<p class="security-warning"><strong>Security:</strong> ${escapeHtml(state.securityWarnings.join(" "))}</p>` : ""}</div><div class="source-meta">Updated ${escapeHtml(formatDate(state.generatedAt))}<br>Run ${escapeHtml(state.manifest.runId)}</div>`;
-  const totals = operatingState.locked ? "—" : state.totalsByCurrency.length ? state.totalsByCurrency.map(total => `${formatAmount(total.amount, total.currency)} ${total.currency}`).join(" · ") : "No unconflicted exact USD evidence";
+    ? `<div><strong>Stop — this information is not current.</strong><p>${operatingState.reasons.map(escapeHtml).join(" · ")}</p>${state.securityWarnings?.length ? `<details class="security-warning"><summary>Drive sharing warning</summary><p>Anyone with the link can open the main Drive folder. Remove public sharing.</p></details>` : ""}</div><div class="source-meta">Last update ${escapeHtml(formatDate(state.generatedAt))}</div>`
+    : `<div><strong>Data is current</strong><p>Updated ${escapeHtml(formatDate(state.generatedAt))}. ${escapeHtml(state.visibleFolderCount)} files are shown.</p>${state.securityWarnings?.length ? `<details class="security-warning"><summary>Drive sharing warning</summary><p>Anyone with the link can open the main Drive folder. Remove public sharing.</p></details>` : ""}</div>`;
+  const totals = operatingState.locked ? "—" : state.totalsByCurrency.length ? state.totalsByCurrency.map(total => `${formatAmount(total.amount, total.currency)} USD`).join(" · ") : "$0 USD";
   $("#metric-grid").innerHTML = [
-    metric("Human decisions", operatingState.locked ? "—" : String(state.decisionQueue.total), "Status, amount, or duplicate decisions requiring human judgment", "red"),
-    metric("Unconfirmed exact USD request evidence ≥ US$1M", totals, operatingState.locked ? "Unavailable while the snapshot is locked" : `${state.moneyQueue.total} unconflicted records; not pipeline, approval, fundability, fee, or revenue`, "blue"),
-    metric("Folders with uploads", operatingState.locked ? "—" : String(state.buckets.active), "Document activity only; lifecycle is unconfirmed", "navy"),
-    metric("Observed changes in 24h", operatingState.locked ? "—" : String(state.changedInLast24Hours), "Artifact timestamp changes; not client-response attribution", "green"),
+    metric("Decisions needed", operatingState.locked ? "—" : String(state.decisionQueue.total), "Files where the information does not agree", "red"),
+    metric("USD requests found", totals, operatingState.locked ? "Unavailable" : `${state.moneyQueue.total} files. These are requests, not approved deals.`, "blue"),
+    metric("Files shown", operatingState.locked ? "—" : String(state.visibleFolderCount), "Files included on this dashboard", "navy"),
+    metric("Changed in 24 hours", operatingState.locked ? "—" : String(state.changedInLast24Hours), "A Drive file changed; this may not be a client reply", "green"),
   ].join("");
   $("#priority-list").innerHTML = operatingState.locked
-    ? `<div class="empty danger">Decision ordering is disabled until a current validated authenticated snapshot is deployed.</div>`
-    : state.decisionQueue.items.slice(0, 7).map(decisionCard).join("") || `<div class="empty">No status, amount, or duplicate decisions are currently surfaced.</div>`;
-  $("#decision-count-note").textContent = operatingState.locked ? "Ordering locked" : `View all ${state.decisionQueue.total}`;
-  $("#disclosures").innerHTML = state.disclosures.map(item => `<p>• ${escapeHtml(item)}</p>`).join("");
+    ? `<div class="empty danger">Today's list is hidden until current information is available.</div>`
+    : state.decisionQueue.items.slice(0, 5).map(decisionCard).join("") || `<div class="empty success">Nothing needs a decision right now.</div>`;
+  $("#decision-count-note").textContent = operatingState.locked ? "Unavailable" : `View all ${state.decisionQueue.total} decisions`;
 }
 
 function dealCard(deal) {
-  const warnings = [deal.duplicateOf ? `Held twin of ${deal.duplicateOf}` : null, deal.duplicateReason, deal.duplicateReviewReason, deal.evidenceReadErrorCount ? `${deal.evidenceReadErrorCount} evidence read error(s)` : null].filter(Boolean);
-  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))} · API modified ${escapeHtml(formatDate(deal.lastModified))}</p></div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>${deal.daysSinceUpdate}d artifact age</span></div>${warnings.length ? `<p class="warning">${escapeHtml(warnings.join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-deal="${escapeHtml(deal.id)}">Evidence details</button><a href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open Drive</a></div></article>`;
+  const warnings = [deal.duplicateOf ? "Possible duplicate" : null, deal.duplicateReason || deal.duplicateReviewReason ? "Duplicate check needed" : null, deal.evidenceReadErrorCount ? "A file could not be read" : null].filter(Boolean);
+  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))}</p></div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>Changed ${deal.daysSinceUpdate} days ago</span></div>${warnings.length ? `<p class="warning">${escapeHtml([...new Set(warnings)].join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-deal="${escapeHtml(deal.id)}">View dashboard details</button><a href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div></article>`;
 }
 
 function renderDeals() {
+  if (operatingState.locked) {
+    $("#deal-search").disabled = true;
+    $("#status-filter").disabled = true;
+    $("#deal-list").innerHTML = `<div class="empty danger">Files are hidden because the information is not current.</div>`;
+    return;
+  }
   const term = $("#deal-search").value.trim().toLowerCase();
   const filter = $("#status-filter").value;
-  const deals = state.deals.filter(deal => (!term || deal.name.toLowerCase().includes(term) || (deal.email || "").toLowerCase().includes(term)) && (filter === "all" || deal.status === filter));
-  $("#deal-list").innerHTML = deals.map(dealCard).join("") || `<div class="empty">No matching Drive folders.</div>`;
+  const deals = state.deals.filter(deal => (!term || deal.name.toLowerCase().includes(term)) && (filter === "all" || deal.status === filter));
+  $("#deal-list").innerHTML = deals.map(dealCard).join("") || `<div class="empty">No matching files.</div>`;
 }
 
 function renderIntelligence() {
   const all = operatingState.locked ? [] : state.decisionQueue.items;
   const statusItems = all.filter(item => item.blockers.includes("status_or_amount"));
   const duplicateItems = all.filter(item => !item.blockers.includes("status_or_amount") && item.blockers.includes("duplicate_resolution"));
-  const renderGroup = (items, offset = 0) => items.map((item, index) => decisionCard(item, offset + index)).join("") || `<div class="empty">No decisions in this category.</div>`;
-  const decisions = operatingState.locked ? `<div class="empty danger">Decision ordering is locked because the snapshot is not decision-eligible.</div>` : `<p class="queue-rule">${escapeHtml(state.decisionQueue.sortRule)}</p><details class="decision-group" open><summary>Status or amount conflicts (${statusItems.length})</summary>${renderGroup(statusItems)}</details><details class="decision-group"><summary>Duplicate-only decisions (${duplicateItems.length})</summary>${renderGroup(duplicateItems, statusItems.length)}</details>`;
-  const money = operatingState.locked ? `<div class="empty danger">Request evidence is unavailable while the snapshot is locked.</div>` : state.moneyQueue.items.map(item => `<article class="money-card"><div><div class="priority-top"><h3>${escapeHtml(item.name)}</h3><strong>${escapeHtml(formatAmount(item.amount, item.currency))}</strong></div><p>${escapeHtml(item.screeningState)}</p>${evidenceBlock(item.evidence)}<p><strong>Why this is not a funding priority:</strong> ${escapeHtml(item.missingGates.join(" · "))}</p><div class="card-actions"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Verify in Drive</a></div></div></article>`).join("") || `<div class="empty">No unconflicted exact USD request evidence qualifies for this narrow inventory.</div>`;
-  $("#intelligence-list").innerHTML = `<section class="panel"><div class="panel-head"><div><p class="eyebrow">COMPLETE INTERNAL WORKLIST</p><h2>All ${escapeHtml(state.decisionQueue.total)} decisions</h2></div><span class="badge">Internal only</span></div>${decisions}</section><section class="panel"><div class="panel-head"><div><p class="eyebrow">UNRANKED EVIDENCE INVENTORY</p><h2>Unconfirmed exact USD request evidence</h2></div><span class="badge">Showing ${state.moneyQueue.items.length} of ${state.moneyQueue.total}</span></div>${money}</section><section class="panel disclosure-panel"><h2>Recipient communication</h2><p><strong>Blocked by design.</strong> No copyable draft is produced until the dashboard has verified contact identity, relationship, channel, consent/suppression, broker routing, owner, cadence, authorization, and immutable action history.</p></section>`;
+  const renderGroup = items => items.map(decisionCard).join("") || `<div class="empty success">None right now.</div>`;
+  const decisions = operatingState.locked ? `<div class="empty danger">Decisions are hidden because the information is not current.</div>` : `<details class="decision-group" open><summary>Information that does not match (${statusItems.length})</summary>${renderGroup(statusItems)}</details><details class="decision-group"><summary>Possible duplicates (${duplicateItems.length})</summary>${renderGroup(duplicateItems)}</details>`;
+  const money = operatingState.locked ? `<div class="empty danger">USD requests are hidden because the information is not current.</div>` : state.moneyQueue.items.map(item => `<article class="money-card"><div><div class="priority-top"><h3>${escapeHtml(item.name)}</h3><strong>${escapeHtml(formatAmount(item.amount, item.currency))}</strong></div><p>This is an amount written in the file. It is not approved or confirmed fundable.</p><div class="card-actions"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div><details><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`).join("") || `<div class="empty">No exact USD requests of at least $1 million are shown.</div>`;
+  $("#intelligence-list").innerHTML = `<section class="panel"><div class="panel-head"><div><p class="eyebrow">DECIDE</p><h2>All ${escapeHtml(state.decisionQueue.total)} decisions</h2></div></div>${decisions}</section><section class="panel"><div class="panel-head"><div><p class="eyebrow">CHECK</p><h2>USD requests found in files</h2></div><span class="badge">${state.moneyQueue.total} files</span></div>${money}</section>`;
 }
 
 function renderSources() {
   const rows = [
-    ["Google Drive", state.sourceHealth.googleDrive, `${state.source.scannedFolders} folders fetched · ${state.source.failedFolderCount} failed · ${state.source.evidenceReadErrorCount} evidence failures`],
-    ["ActiveCampaign", state.sourceHealth.activeCampaign, state.sourceHealth.activeCampaign.connected ? `${state.sourceHealth.activeCampaign.contactsTotal.toLocaleString()} contacts · ${state.sourceHealth.activeCampaign.campaignsTotal.toLocaleString()} campaigns` : state.sourceHealth.activeCampaign.reason],
-    ["Calendly", state.sourceHealth.calendly, state.sourceHealth.calendly.connected ? `${state.sourceHealth.calendly.upcomingEvents} upcoming active events returned` : state.sourceHealth.calendly.reason],
-    ["MeetAlfred", state.sourceHealth.meetAlfred, state.sourceHealth.meetAlfred.connected ? `${state.sourceHealth.meetAlfred.campaignsTotal} campaigns returned` : state.sourceHealth.meetAlfred.reason],
+    ["Google Drive", state.sourceHealth.googleDrive, `${state.source.scannedFolders} folders checked · ${state.visibleFolderCount} shown`],
+    ["ActiveCampaign", state.sourceHealth.activeCampaign, state.sourceHealth.activeCampaign.connected ? `${state.sourceHealth.activeCampaign.contactsTotal.toLocaleString()} contacts found` : state.sourceHealth.activeCampaign.reason],
+    ["Calendly", state.sourceHealth.calendly, state.sourceHealth.calendly.connected ? `${state.sourceHealth.calendly.upcomingEvents} upcoming events found` : state.sourceHealth.calendly.reason],
+    ["MeetAlfred", state.sourceHealth.meetAlfred, state.sourceHealth.meetAlfred.connected ? `${state.sourceHealth.meetAlfred.campaignsTotal} campaigns found` : state.sourceHealth.meetAlfred.reason],
   ];
-  $("#source-health").innerHTML = rows.map(([name, source, detail]) => `<article class="source-card"><div class="source-icon ${source.connected ? "ok" : "bad"}"></div><div><h2>${escapeHtml(name)}</h2><p>${escapeHtml(detail || "Unavailable")}</p><dl class="source-dl"><dt>Access</dt><dd>${source.connected ? "Available" : "Unavailable"}</dd><dt>Metadata fetched now</dt><dd>${source.connected || source.metadataFetched ? "Yes" : "No"}</dd><dt>Stored / ingested</dt><dd>${source.ingested ? "Yes" : "No"}</dd><dt>Joined to files</dt><dd>${source.joinedToDeals ? "Yes" : "No"}</dd><dt>Checked</dt><dd>${escapeHtml(formatDate(source.checkedAt || state.generatedAt))}</dd></dl><small>${escapeHtml([source.accessRisk, source.limitation || source.decisionUse || source.reason].filter(Boolean).join(" ") || "No limitation recorded")}</small></div></article>`).join("") + `<article class="source-card"><div class="source-icon bad"></div><div><h2>GA4 / first-party website analytics</h2><p>Not configured in this deployment.</p><small>No website traffic value, trend, or interpretation is displayed.</small></div></article><article class="source-card"><div class="source-icon bad"></div><div><h2>Snapshot delta history</h2><p>Not yet persisted in an immutable history store.</p><small>The current 24-hour count is based on artifact timestamps, not yesterday-versus-today snapshot comparison.</small></div></article>`;
+  $("#source-health").innerHTML = `<article class="source-card security-source"><div class="source-icon bad"></div><div><h2>Dashboard access</h2><p><strong>Shared-link access</strong></p><small>Anyone with this full dashboard link can open it. There are no individual logins, revocation controls, or access logs. The main Drive folder also still allows anyone with its link to open it.</small></div></article>` + rows.map(([name, source, detail]) => `<article class="source-card"><div class="source-icon ${source.connected ? "ok" : "bad"}"></div><div><h2>${escapeHtml(name)}</h2><p>${escapeHtml(detail || "Not available")}</p><p class="connection-answer"><strong>${source.connected ? "Working" : "Not working"}</strong>${source.joinedToDeals ? " · Used with files" : " · Not matched to files"}</p><small>${escapeHtml(source.limitation || source.decisionUse || source.reason || "No note")}</small></div></article>`).join("") + `<article class="source-card"><div class="source-icon bad"></div><div><h2>Website traffic</h2><p>Not connected</p><small>No website traffic number is shown.</small></div></article>`;
 }
 
 function showDetail(id) {
+  if (operatingState.locked) return;
   const deal = state.deals.find(item => item.id === id);
   if (!deal) return;
   const evidence = deal.statusEvidence || deal.amountEvidence;
-  $("#dialog-content").innerHTML = `<p class="eyebrow">AUTHENTICATED DRIVE EVIDENCE</p><h2>${escapeHtml(deal.name)}</h2><dl><dt>Observation</dt><dd>${escapeHtml(statusLabel(deal.status))}</dd><dt>Status basis</dt><dd>${escapeHtml(deal.statusReason)}</dd><dt>Status confidence</dt><dd>${escapeHtml(deal.statusConfidence)}</dd><dt>Client-stated request</dt><dd>${escapeHtml(formatAmount(deal.amount, deal.currency))}</dd><dt>Amount source</dt><dd>${escapeHtml(deal.amountSource || "Not available")}</dd><dt>Evidence file</dt><dd>${escapeHtml(evidence?.fileName || "No decision-level evidence extracted")}</dd><dt>Evidence timestamp</dt><dd>${escapeHtml(formatDate(evidence?.fileModifiedTime))}</dd><dt>Evidence excerpt</dt><dd>${escapeHtml(evidence?.excerpt || "Unavailable")}</dd><dt>File inventory</dt><dd>${deal.documentCount} files · ${deal.uploadCount} non-system uploads</dd><dt>Filename-only indicators</dt><dd>${escapeHtml(deal.documentChecklistGaps.join(", ") || "None detected")}<br><small>These are not confirmed missing documents and cannot create an external request.</small></dd><dt>Duplicate state</dt><dd>${escapeHtml(deal.duplicateOf ? `Held twin of ${deal.duplicateOf}` : deal.duplicateReviewReason || "No duplicate signal")}</dd></dl><a class="primary-link" href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open source in Google Drive</a>`;
+  $("#dialog-content").innerHTML = `<p class="eyebrow">FILE DETAILS</p><h2>${escapeHtml(deal.name)}</h2><dl><dt>What we know</dt><dd>${escapeHtml(statusLabel(deal.status))}</dd><dt>Why</dt><dd>${escapeHtml(deal.statusReason)}</dd><dt>Exact request found</dt><dd>${escapeHtml(formatAmount(deal.amount, deal.currency))}</dd><dt>Evidence file</dt><dd>${escapeHtml(evidence?.fileName || "No short evidence note found")}</dd><dt>Last changed</dt><dd>${escapeHtml(formatDate(deal.lastModified))}</dd><dt>Files in folder</dt><dd>${deal.documentCount}</dd><dt>Duplicate check</dt><dd>${escapeHtml(deal.duplicateOf || deal.duplicateReviewReason ? "Needs a duplicate decision" : "No duplicate signal found")}</dd></dl><a class="primary-link" href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open in Google Drive</a>`;
   $("#detail-dialog").showModal();
 }
 
@@ -159,20 +175,23 @@ function wire() {
 }
 
 async function unlock(password) {
-  $("#unlock-error").textContent = "Opening encrypted snapshot…";
+  $("#unlock-error").textContent = "Opening…";
   try {
     const envelope = await fetch(`./data.enc?ts=${Date.now()}`, { cache: "no-store" }).then(response => { if (!response.ok) throw new Error("Snapshot unavailable"); return response.json(); });
     state = await decrypt(envelope, password);
     operatingState = evaluateSnapshot(state);
     history.replaceState(null, "", `${location.pathname}${location.search}`);
+    $("#access-key").value = "";
     $("#unlock").classList.add("hidden");
     $("#app").classList.remove("hidden");
     renderCommand(); renderDeals(); renderIntelligence(); renderSources(); wire();
   } catch {
-    $("#unlock-error").textContent = "That private link or access key is invalid. Please use the latest AFG dashboard link.";
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+    $("#access-key").value = "";
+    $("#unlock-error").textContent = "This link or access key is not valid. Use the latest AFG dashboard link.";
   }
 }
 
 $("#unlock-form").addEventListener("submit", event => { event.preventDefault(); unlock($("#access-key").value); });
 const hashKey = new URLSearchParams(location.hash.slice(1)).get("key");
-if (hashKey) { $("#access-key").value = hashKey; unlock(hashKey); }
+if (hashKey) { history.replaceState(null, "", `${location.pathname}${location.search}`); unlock(hashKey); }

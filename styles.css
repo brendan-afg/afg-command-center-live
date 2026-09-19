@@ -28,3 +28,42 @@ button.badge{border:0;cursor:pointer;font:inherit}
 @media(max-width:760px){.primary-action a{width:100%}.record-warning{line-height:1.45}.evidence-details .decision-grid{margin-top:10px}.panel-head{align-items:flex-start}.panel-head button.badge{min-height:40px}}
 
 .security-warning{margin-top:10px!important;padding:9px 11px;border-radius:9px;background:#fff1f0;color:#912018;border:1px solid #f2b8b5;font-size:13px}
+
+/* Plain-language executive view */
+.start-panel{border-top:5px solid var(--blue)}
+.start-panel h2{font-size:24px}
+.simple-banner{align-items:center;min-height:58px}
+.decision-card{grid-template-columns:1fr;border-left:5px solid var(--red);padding:20px}
+.decision-card h3{font-size:20px;margin:4px 0 0}
+.plain-label{display:block;color:var(--blue);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+.decision-question{font-size:16px;color:var(--ink)!important;margin-top:14px!important}
+.decision-card>.priority-body>p{line-height:1.5;color:#475467}
+.decision-card .evidence-details{margin-top:14px}
+.empty.success{background:#ecfdf3;border-color:#abefc6;color:#067647;font-weight:800}
+.connection-answer{color:var(--ink)!important}
+.money-card details{margin-top:14px}
+.metric-card p{text-transform:none;letter-spacing:0;font-size:13px}
+.metric-card small{font-size:13px}
+.deal-card .card-actions a{min-height:40px;display:inline-flex;align-items:center;padding:0 10px;border-radius:9px;background:#edf4ff}
+@media(max-width:760px){
+  main{padding-top:18px}
+  header{margin-bottom:18px}
+  header .muted{font-size:14px;margin:6px 0}
+  .source-banner{padding:14px 16px}
+  .start-panel{padding:14px}
+  .start-panel h2{font-size:21px}
+  .decision-card{padding:15px}
+  .decision-card h3{font-size:18px}
+  .metric-grid{grid-template-columns:1fr 1fr}
+  .metric-card{min-height:142px}
+  .metric-card p{font-size:12px}
+  .metric-card small{font-size:12px}
+}
+
+#decision-count-note{background:var(--blue);color:#fff;padding:10px 14px;min-height:44px}
+details.security-warning{display:block;width:fit-content;margin-top:10px!important;padding:8px 11px}
+details.security-warning summary{font-size:13px;cursor:pointer}
+details.security-warning p{margin:7px 0 0;font-size:13px}
+.dialog-close{min-width:56px;min-height:44px;border-radius:10px;background:#f2f4f7;font-size:14px;font-weight:800;color:var(--navy)}
+.security-source{border-color:#f2b8b5;background:#fff8f7}
+@media(max-width:760px){#decision-count-note{max-width:128px;line-height:1.2}.dialog-close{right:10px;top:10px}}
