@@ -1,0 +1,20 @@
+{
+  "name": "afg-command-center-daily",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "main": "pnpm check && pnpm test && pnpm scan:secrets && node scripts/fetch-github-data.mjs && node scripts/build.mjs && node scripts/verify-artifact.mjs",
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "scan:secrets": "node scripts/scan-secrets.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "tsx": "^4.19.1",
+    "typescript": "5.9.3",
+    "vitest": "^2.1.4"
+  },
+  "packageManager": "pnpm@10.4.1"
+}
