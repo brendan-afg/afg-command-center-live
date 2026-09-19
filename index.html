@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'" />
+  <title>AFG Command Center</title>
+  <link rel="icon" href="./afg-logo.jpeg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="unlock" class="unlock-shell">
+    <div class="unlock-card">
+      <img src="./afg-logo.jpeg" alt="AltFunds Global" />
+      <p class="eyebrow">PRIVATE OPERATING DASHBOARD</p>
+      <h1>AFG Command Center</h1>
+      <p class="muted">Open the private link supplied by AFG or enter its access key.</p>
+      <form id="unlock-form">
+        <label for="access-key">Access key</label>
+        <input id="access-key" type="password" autocomplete="current-password" placeholder="Enter access key" required />
+        <button type="submit">Open dashboard</button>
+      </form>
+      <p id="unlock-error" class="error" role="alert"></p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <img src="./afg-logo.jpeg" alt="AltFunds Global" class="brand" />
+      <nav id="nav" aria-label="Primary dashboard navigation">
+        <button class="nav-item active" data-view="command">Command Center</button>
+        <button class="nav-item" data-view="pipeline">Evidence Inventory</button>
+        <button class="nav-item" data-view="intelligence">Decision Work</button>
+        <button class="nav-item" data-view="sources">Source Health</button>
+      </nav>
+      <div class="sidebar-footer">Encrypted daily snapshot<br><span id="side-time">—</span></div>
+    </aside>
+
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">ALTFUNDS GLOBAL</p>
+          <h1 id="page-title">Command Center</h1>
+          <p id="page-subtitle" class="muted">Human decisions from authenticated AFG Drive evidence.</p>
+        </div>
+        <div id="freshness" class="health-pill">Loading</div>
+      </header>
+
+      <section id="command" class="view active-view">
+        <div id="source-banner" class="source-banner"></div>
+        <section class="panel">
+          <div class="panel-head"><div><p class="eyebrow">HUMAN DECISIONS FIRST</p><h2>Decision Queue</h2></div><button id="decision-count-note" class="badge" data-view="intelligence">Human review required</button></div>
+          <div id="priority-list" class="priority-list"></div>
+        </section>
+        <div id="metric-grid" class="metric-grid"></div>
+        <section class="panel disclosure-panel"><h2>How to read these numbers</h2><div id="disclosures"></div></section>
+      </section>
+
+      <section id="pipeline" class="view">
+        <div class="toolbar">
+          <input id="deal-search" type="search" placeholder="Search files" aria-label="Search deal files" />
+          <select id="status-filter" aria-label="Filter by observed state"><option value="all">All observed states</option><option value="active">Uploads present — lifecycle unconfirmed</option><option value="intake_only">Intake artifacts only</option><option value="needs_review">Human decision required</option><option value="funded">Funded marker detected</option><option value="closed">Terminal marker detected</option></select>
+        </div>
+        <div id="deal-list" class="deal-list"></div>
+      </section>
+
+      <section id="intelligence" class="view">
+        <div class="source-banner"><strong>Internal decision support only.</strong> Composite priority scoring and recipient drafts are disabled. Human decisions are shown before the narrow unconfirmed-USD screen.</div>
+        <div id="intelligence-list" class="intelligence-list"></div>
+      </section>
+
+      <section id="sources" class="view">
+        <div id="source-health" class="source-health-grid"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Mobile dashboard navigation">
+      <button class="active" data-view="command">Today</button>
+      <button data-view="pipeline">Evidence</button>
+      <button data-view="intelligence">Decisions</button>
+      <button data-view="sources">Sources</button>
+    </nav>
+  </div>
+
+  <dialog id="detail-dialog"><button id="dialog-close" class="dialog-close" aria-label="Close">×</button><div id="dialog-content"></div></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
