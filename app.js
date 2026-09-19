@@ -49,7 +49,7 @@ const safeDriveUrl = value => {
   }
 };
 const formatDate = value => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }).format(new Date(value)) + " ET" : "Unavailable";
-const formatAmount = (amount, currency) => amount == null || !currency ? "Not extracted" : new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
+const formatAmount = (amount, currency) => amount == null || !currency ? "Not extracted" : new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
 const statusLabel = value => ({
   active: "Uploads present — lifecycle unconfirmed",
   intake_only: "Intake artifacts only — lifecycle unconfirmed",
