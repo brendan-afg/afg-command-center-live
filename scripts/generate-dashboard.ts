@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { syncDriveSnapshot, type DriveDealSnapshot } from "../server/driveSync";
-import { buildAdvisoryBoard, buildBlueOceanOpportunities, buildCompanyStrategy, buildFileAdvice, buildTodayPlan } from "./advisory-engine";
+import { buildAdvisoryBoard, buildBlueOceanOpportunities, buildCompanyStrategy, buildFileAdvice, buildTodayPlan, type ActionState } from "./advisory-engine";
+import { readEveryClientFile } from "./full-file-reader";
+import { analyzeEveryDeal } from "./full-deal-analysis";
 
 const SITE_DIR = path.resolve("site");
 const PUBLIC_KEY_PATH = path.resolve("recipient-public-key.json");
@@ -236,17 +238,62 @@ export function buildRequestEvidenceTotals(deals: DriveDealSnapshot[]) {
   }] : [];
 }
 
+export function gateFileAdviceWithFullAnalysis(fileAdvice: ReturnType<typeof buildFileAdvice>, fullItems: Awaited<ReturnType<typeof analyzeEveryDeal>>["items"]) {
+  const byId = new Map(fullItems.map(item => [item.dealId, item]));
+  return fileAdvice.map(item => {
+    const full = byId.get(item.dealId);
+    if (!full) return { ...item, actionState: "VERIFY_FIRST" as const, owner: "Taimour", due: "Today", action: "Open the Drive file and complete the full-document analysis before any external action.", why: "No complete full-document analysis is attached.", finishLine: "A reconciled extraction ledger and reviewed product decision are recorded.", message: null };
+    const actionState: ActionState = full.readiness === "do_not_contact" ? "DO_NOT_CONTACT" : full.readiness === "needs_verification" ? "VERIFY_FIRST" : full.readiness === "advisory_first" ? "QUALIFY" : "SCREEN";
+    const incomplete = full.readCoverage.partialCount + full.readCoverage.emptyCount + full.readCoverage.unsupportedCount + full.readCoverage.tooLargeCount + full.readCoverage.failedCount;
+    return {
+      ...item,
+      actionState,
+      owner: actionState === "DO_NOT_CONTACT" ? "No action" : "Taimour",
+      due: actionState === "DO_NOT_CONTACT" ? "Do not contact" : "Today",
+      instrument: full.recommendedProduct,
+      action: full.bestNextAction,
+      why: actionState === "DO_NOT_CONTACT"
+        ? "The lifecycle state is terminal and is monotonic across the dashboard."
+        : incomplete
+          ? `${incomplete} document(s) are not completely readable; absence claims and external outreach are blocked.`
+          : full.whyThisProduct,
+      finishLine: actionState === "DO_NOT_CONTACT"
+        ? "No client or provider outreach unless a new authoritative lifecycle decision is recorded."
+        : full.readiness === "provider_ready"
+          ? "Taimour reviews the exact evidence and manually authorizes or rejects one provider fit-check."
+          : full.readiness === "advisory_first"
+            ? "A defined advisory scope and client-approved missing-item plan are recorded."
+            : "The extraction, status, duplicate, and evidence gates are resolved in the source file.",
+      steps: [full.bestNextAction, "Open the document ledger and exact source quotes.", "Record the human decision before any external communication."],
+      evidence: {
+        ...item.evidence,
+        exactAmount: full.exactAmount,
+        currency: full.currency,
+        limitation: incomplete ? "At least one document is partial, empty, unsupported, oversized, or unreadable; no absence conclusion or external recommendation is authorized." : "All inventoried documents reached a complete readable state; provided claims still require exact source quotes.",
+      },
+      message: null,
+    };
+  });
+}
+
 export async function buildDashboardData() {
   const startedAt = new Date().toISOString();
   const [drive, ac, cal, alfred] = await Promise.all([syncDriveSnapshot({ persist: false, excludeFolderIds: DASHBOARD_EXCLUDED_FOLDER_IDS }), activeCampaign(), calendly(), meetAlfred()]);
   assertPublishableSnapshot(drive);
   const generatedAt = new Date().toISOString();
   const runId = crypto.createHash("sha256").update(`${generatedAt}:${drive.snapshotId}`).digest("hex").slice(0, 20);
+  const sourceCommit = process.env.AFG_SOURCE_COMMIT || null;
   const visibleDriveDeals = filterDashboardDeals(drive.deals);
   const decisions = buildDecisionQueue(visibleDriveDeals);
   const money = buildMoneyQueue(visibleDriveDeals);
   const requestEvidenceTotals = buildRequestEvidenceTotals(visibleDriveDeals);
-  const fileAdvice = buildFileAdvice(visibleDriveDeals);
+  const fullRead = await readEveryClientFile(visibleDriveDeals);
+  const accountedDocuments = fullRead.readableCount + fullRead.partialCount + fullRead.emptyCount + fullRead.unsupportedCount + fullRead.tooLargeCount + fullRead.failedCount;
+  if (fullRead.folderCount !== visibleDriveDeals.length || fullRead.failedCount > 0 || accountedDocuments !== fullRead.inventoryCount) {
+    throw new Error(`Refusing to publish incomplete full-document analysis: ${fullRead.folderCount}/${visibleDriveDeals.length} folders, ${fullRead.failedCount} failed file read(s)`);
+  }
+  const fullAnalysis = await analyzeEveryDeal(visibleDriveDeals, fullRead);
+  const fileAdvice = gateFileAdviceWithFullAnalysis(buildFileAdvice(visibleDriveDeals), fullAnalysis.items);
   const todayPlan = buildTodayPlan(fileAdvice);
   const sourceHealth = {
     googleDrive: {
@@ -258,8 +305,15 @@ export async function buildDashboardData() {
       fetched: drive.scannedFolders,
       failed: drive.failedFolderCount,
       evidenceFailures: drive.evidenceReadErrorCount,
-      decisionUse: "Authenticated inventory and conservative evidence extraction",
-      limitation: "PDF/DOCX/image contents are not yet parsed; filename indicators require human confirmation.",
+      fullDocumentInventory: fullRead.inventoryCount,
+      fullDocumentReadable: fullRead.readableCount,
+      fullDocumentPartial: fullRead.partialCount,
+      fullDocumentEmpty: fullRead.emptyCount,
+      fullDocumentUnsupported: fullRead.unsupportedCount,
+      fullDocumentTooLarge: fullRead.tooLargeCount,
+      fullDocumentFailed: fullRead.failedCount,
+      decisionUse: "Authenticated inventory, conservative status/amount evidence, and full-document extraction with per-file coverage",
+      limitation: `${fullRead.partialCount} partial, ${fullRead.emptyCount} empty, ${fullRead.unsupportedCount} unsupported, and ${fullRead.tooLargeCount} oversized file(s) are disclosed and routed to verification; only complete exact-quote evidence may support a provided-item claim.`,
       accessRisk: "An anonymous root permission remains from the last access audit. The read-only service account cannot revoke it; owner-level Drive permission is required.",
     },
     activeCampaign: ac,
@@ -278,7 +332,7 @@ export async function buildDashboardData() {
       activeCampaignJoinedToDeals: Boolean(ac?.joinedToDeals),
       calendlyJoinedToDeals: Boolean(cal?.joinedToDeals),
       meetAlfredJoinedToDeals: Boolean(alfred?.joinedToDeals),
-      documentContentsParsed: false,
+      documentContentsParsed: true,
     },
   });
   const visibleBuckets = {
@@ -324,6 +378,7 @@ export async function buildDashboardData() {
     manifest: {
       runId,
       snapshotId: drive.snapshotId,
+      sourceCommit,
       startedAt,
       completedAt: generatedAt,
       sourceMode: "authenticated_service_account_drive_api",
@@ -332,6 +387,15 @@ export async function buildDashboardData() {
       scannedFolders: drive.scannedFolders,
       failedFolderCount: drive.failedFolderCount,
       evidenceReadErrorCount: drive.evidenceReadErrorCount,
+      fullDocumentInventory: fullRead.inventoryCount,
+      fullDocumentReadable: fullRead.readableCount,
+      fullDocumentPartial: fullRead.partialCount,
+      fullDocumentEmpty: fullRead.emptyCount,
+      fullDocumentUnsupported: fullRead.unsupportedCount,
+      fullDocumentTooLarge: fullRead.tooLargeCount,
+      fullDocumentFailed: fullRead.failedCount,
+      fullAnalysisModelRuns: fullAnalysis.coverage.modelRuns,
+      fullAnalysisCacheHits: fullAnalysis.coverage.cacheHits,
       sourceModifiedAt: drive.sourceModifiedAt,
       internalValidation: "passed",
       independentCompletenessAttestation: false,
@@ -363,6 +427,7 @@ export async function buildDashboardData() {
     companyStrategy,
     blueOcean,
     advisoryBoard,
+    fullAnalysis,
     sourceHealth,
     deals,
     visibleFolderCount: visibleDriveDeals.length,
@@ -374,7 +439,7 @@ export async function buildDashboardData() {
       "Queue values are unconfirmed exact client-stated USD requests, not approved or fundable amounts.",
       "Currencies are never combined; non-USD requests are not included in the USD screen.",
       "Hypothetical fee arithmetic is not included in the operational dashboard payload.",
-      "Filename-only document indicators are not missing-document findings and cannot create recipient requests.",
+      "Client checklist items are labeled 'not located' and come from authenticated readable contents; unsupported or oversized files remain explicit verification gaps.",
       "All Decision Cards are internal. Recipient drafts and copy controls are disabled until contact, cadence, authorization, and action-history controls exist.",
     ],
   };

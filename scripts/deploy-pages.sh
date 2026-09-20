@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/ubuntu/afg-command-center-live-final"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEY="/home/ubuntu/.ssh/afg_pages_deploy"
 REMOTE="git@github.com:brendan-afg/afg-command-center-live.git"
 PUBLIC_ENVELOPE="https://brendan-afg.github.io/afg-command-center-live/data.enc"
@@ -15,6 +15,11 @@ flock -w 120 9 || { echo "Another AFG refresh held the deployment lock for more 
 [[ -n "${GOOGLE_DRIVE_FOLDER_ID:-}" ]] || { echo "Drive scope unavailable; refusing to publish." >&2; exit 1; }
 
 cd "$ROOT"
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo "Source tree is not clean; refusing to publish an uncommitted build." >&2; git status --short >&2; exit 1; }
+source_commit=$(git rev-parse HEAD)
+remote_main=$(GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" git ls-remote "$REMOTE" refs/heads/main | cut -f1)
+[[ "$source_commit" == "$remote_main" ]] || { echo "Local source commit does not match protected remote main; refusing to publish." >&2; exit 1; }
+export AFG_SOURCE_COMMIT="$source_commit"
 pnpm install --frozen-lockfile
 GITHUB_EVENT_NAME=manual-scheduled-refresh pnpm main
 for artifact in index.html app.js snapshot-policy.js url-policy.js styles.css afg-logo.jpeg data.enc; do

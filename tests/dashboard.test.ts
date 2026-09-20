@@ -1,9 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { assertPublishableSnapshot, buildDecisionQueue, buildMoneyQueue, buildRequestEvidenceTotals, encryptPayload, filterDashboardDeals } from "../scripts/generate-dashboard";
+import { assertPublishableSnapshot, buildDecisionQueue, buildMoneyQueue, buildRequestEvidenceTotals, encryptPayload, filterDashboardDeals, gateFileAdviceWithFullAnalysis } from "../scripts/generate-dashboard";
 import { buildDriveSnapshotFromPublicInputs, parseExactAmountValue } from "../server/driveSync";
 import { buildBlueOceanOpportunities, buildCompanyStrategy, buildFileAdvice, buildTodayPlan } from "../scripts/advisory-engine";
+import { enforceStatusSafety, matchProviders, providerEligibility } from "../scripts/full-deal-analysis";
+import { applyFolderTextBudget, prepareExtractedText } from "../scripts/full-file-reader";
+import { PROVIDERS } from "../scripts/provider-directory";
 // @ts-expect-error Browser policy is intentionally plain ESM copied directly to the static site.
 import { evaluateSnapshot } from "../site/snapshot-policy.js";
 // @ts-expect-error Browser URL policy is intentionally plain ESM copied directly to the static site.
@@ -38,7 +41,7 @@ function validBrowserSnapshot(generatedAt: string, businessDateEastern: string) 
   return {
     generatedAt,
     businessDateEastern,
-    manifest: { sourceMode: "authenticated_service_account_drive_api", internalValidation: "passed", runId: "run-1", snapshotId: "snap-1" },
+    manifest: { sourceMode: "authenticated_service_account_drive_api", internalValidation: "passed", runId: "run-1", snapshotId: "snap-1", sourceCommit: "a".repeat(40) },
     source: { connection: "fresh_snapshot", totalFolders: 192, scannedFolders: 192, failedFolderCount: 0, evidenceReadErrorCount: 0, snapshotId: "snap-1" },
   };
 }
@@ -135,6 +138,9 @@ describe("snapshot decision-use lock", () => {
     const mismatch = validBrowserSnapshot("2026-09-19T09:10:00.000Z", "2026-09-19");
     mismatch.manifest.snapshotId = "different";
     expect(evaluateSnapshot(mismatch, new Date("2026-09-19T10:00:00.000Z")).locked).toBe(true);
+    const unbound = validBrowserSnapshot("2026-09-19T09:10:00.000Z", "2026-09-19");
+    unbound.manifest.sourceCommit = "not-a-commit";
+    expect(evaluateSnapshot(unbound, new Date("2026-09-19T10:00:00.000Z")).reasons.join(" ")).toMatch(/source commit/);
   });
 
   it("locks future-dated artifacts and same-day artifacts generated before the 5 a.m. deadline", () => {
@@ -296,6 +302,24 @@ describe("actionable intelligence operating layer", () => {
     expect(plan.items.every(item => item.actionState !== "DO_NOT_CONTACT")).toBe(true);
   });
 
+  it("gates legacy filename-only actions through the full-document readiness result", () => {
+    const base = buildFileAdvice(adviceSnapshot().deals);
+    const full = base.map(item => ({
+      dealId: item.dealId,
+      readiness: item.dealId === "closed-action" ? "do_not_contact" : "needs_verification",
+      readCoverage: { partialCount: 1, emptyCount: 0, unsupportedCount: 0, tooLargeCount: 0, failedCount: 0 },
+      recommendedProduct: "Capital Advisory",
+      bestNextAction: "Resolve the extraction gate internally; do not contact the client or a provider.",
+      whyThisProduct: "No externally actionable product fit is established.",
+      exactAmount: null,
+      currency: null,
+    })) as any;
+    const gated = gateFileAdviceWithFullAnalysis(base, full);
+    expect(gated.find(item => item.dealId === "closed-action")).toMatchObject({ actionState: "DO_NOT_CONTACT", message: null });
+    expect(gated.filter(item => item.dealId !== "closed-action").every(item => item.actionState === "VERIFY_FIRST" && item.message === null)).toBe(true);
+    expect(gated.every(item => /full-document|not completely readable|lifecycle state/i.test(`${item.why} ${item.evidence.limitation}`))).toBe(true);
+  });
+
   it("produces five company priorities and labels every Blue Ocean idea as a test", () => {
     const deals = adviceSnapshot().deals;
     const advice = buildFileAdvice(deals);
@@ -306,8 +330,191 @@ describe("actionable intelligence operating layer", () => {
     expect(blueOcean).toHaveLength(3);
     expect(blueOcean.every(item => item.status === "Test—not validated demand")).toBe(true);
     const html = fs.readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
-    expect(html).toMatch(/File Advice/);
+    expect(html).toMatch(/Products & Providers/);
     expect(html).toMatch(/Company Strategy/);
     expect(html).toMatch(/Advisory Board/);
+  });
+});
+
+describe("full-file product and provider layer", () => {
+  const analysis = {
+    clientNeed: "Working capital secured by commercial receivables",
+    businessDescription: "A US operating company with commercial accounts receivable",
+    sector: "Wholesale distribution",
+    jurisdiction: "United States",
+    requestedAmountText: "USD 5 million",
+    recommendedProduct: "Working Capital Against Revenue" as const,
+    productConfidence: "high" as const,
+    readiness: "advisory_first" as const,
+    whyThisProduct: "Receivables support a working-capital structure.",
+    providedItems: ["Accounts receivable aging"],
+    notLocatedItems: ["Current financial statements"],
+    redFlags: [],
+    bestNextAction: "Complete the file before provider outreach.",
+    evidence: [],
+  };
+
+  const deal = {
+    id: "provider-test",
+    status: "active",
+    amount: 5_000_000,
+    currency: "USD",
+    duplicateOf: null,
+    duplicateReason: null,
+    duplicateReviewReason: null,
+  } as any;
+
+  it("keeps verified provider contacts tied to primary correspondence evidence", () => {
+    expect(PROVIDERS.length).toBeGreaterThanOrEqual(5);
+    expect(PROVIDERS.every(provider => provider.company && provider.contactName && (provider.email || provider.phone || provider.website) && provider.evidenceSource && provider.evidenceDate && provider.evidenceLocator && provider.contactEvidenceSource && provider.contactVerifiedAt)).toBe(true);
+    expect(PROVIDERS.some(provider => provider.id === "slr-business-credit" && provider.phone)).toBe(true);
+  });
+
+  it("shows no provider or draft for an advisory-first file", () => {
+    expect(matchProviders(analysis, deal)).toEqual([]);
+  });
+
+  it("matches a fully gated US receivables file to a confirmed provider before public candidates", () => {
+    const providerReady = {
+      ...analysis,
+      readiness: "provider_ready" as const,
+      providedItems: ["Commercial accounts receivable", "US operating company"],
+      evidence: [
+        { claim: "Commercial accounts receivable", fileName: "aging.pdf", quote: "commercial accounts receivable" },
+        { claim: "United States operating company", fileName: "profile.pdf", quote: "United States operating company" },
+      ],
+    };
+    const matches = matchProviders(providerReady, deal);
+    expect(matches[0]).toMatchObject({ id: "slr-business-credit", matchState: "ready_to_confirm" });
+    expect(matches[0].draft).toMatch(/Before I send a package/);
+    expect(matches[0].roleplay).toBeTruthy();
+    const firstPublic = matches.findIndex(item => item.confidence === "public_candidate");
+    const lastConfirmed = Math.max(...matches.map((item, index) => item.confidence === "provider_confirmed" ? index : -1));
+    expect(firstPublic === -1 || firstPublic > lastConfirmed).toBe(true);
+  });
+
+  it("rejects below-minimum and wrong-geography provider matches as hard failures", () => {
+    const slr = PROVIDERS.find(provider => provider.id === "slr-business-credit")!;
+    const providerReady = { ...analysis, readiness: "provider_ready" as const, evidence: [{ claim: "Commercial receivables", fileName: "a", quote: "commercial receivables" }, { claim: "Use of funds", fileName: "b", quote: "working capital" }] };
+    expect(providerEligibility(slr, providerReady, { ...deal, amount: 500_000 } as any).eligible).toBe(false);
+    expect(providerEligibility(slr, { ...providerReady, jurisdiction: "Canada" }, deal as any).eligible).toBe(false);
+  });
+
+  it("rejects null amounts and unrelated products even when a provider has no published range", () => {
+    const pensam = PROVIDERS.find(provider => provider.id === "pensam-capital")!;
+    const evidence = [
+      { claim: "US multifamily property", fileName: "property.pdf", quote: "United States multifamily property collateral" },
+      { claim: "Capital request", fileName: "request.pdf", quote: "capital request secured by real estate" },
+    ];
+    const assetCase = { ...analysis, readiness: "provider_ready" as const, recommendedProduct: "Asset-Secured Capital" as const, evidence };
+    expect(providerEligibility(pensam, assetCase, { ...deal, amount: null, currency: null } as any).eligible).toBe(false);
+    const unrelated = { ...assetCase, recommendedProduct: "Proof of Funds Letter" as const };
+    expect(providerEligibility(pensam, unrelated, deal as any).eligible).toBe(false);
+    expect(matchProviders(unrelated, deal as any).some(item => item.id === "pensam-capital")).toBe(false);
+  });
+
+  it("blocks all provider suggestions when the file needs a status decision", () => {
+    expect(matchProviders(analysis, { ...deal, status: "needs_review" } as any)).toEqual([]);
+  });
+
+  it("renders plain-language product, checklist, advisory, and provider sections", () => {
+    const app = fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8");
+    expect(app).toMatch(/What the file is about/);
+    expect(app).toMatch(/What is confirmed in the file/);
+    expect(app).toMatch(/What was not located/);
+    expect(app).toMatch(/Eligible provider candidates/);
+    expect(app).toMatch(/How the reader is likely to react/);
+  });
+});
+
+
+describe("document extraction completeness", () => {
+  it("distinguishes complete, partial, and empty extractor output", () => {
+    expect(prepareExtractedText("complete text")).toMatchObject({ status: "read", truncated: false, originalCharacters: 13, retainedCharacters: 13 });
+    expect(prepareExtractedText("x".repeat(30_001))).toMatchObject({ status: "partial", truncated: true, originalCharacters: 30_001, retainedCharacters: 30_000 });
+    expect(prepareExtractedText("   \n\n")).toMatchObject({ status: "empty", truncated: false, originalCharacters: 0, retainedCharacters: 0 });
+    const reader = fs.readFileSync(new URL("../scripts/full-file-reader.ts", import.meta.url), "utf8");
+    expect(reader).toMatch(/shortcutDetails\(targetId,targetMimeType\)/);
+    expect(reader).toMatch(/shortcut target is not accessible to the service account/);
+  });
+
+  it("marks folder-budget clipping as partial instead of silently readable", () => {
+    const documents = Array.from({ length: 5 }, (_, index) => ({
+      fileId: `f-${index}`,
+      fileName: `file-${index}.txt`,
+      mimeType: "text/plain",
+      modifiedTime: "2026-09-19T12:00:00.000Z",
+      size: 30_000,
+      method: "text" as const,
+      status: "read" as const,
+      originalCharacters: 30_000,
+      retainedCharacters: 30_000,
+      truncated: false,
+      characters: 30_000,
+      text: "x".repeat(30_000),
+      note: null,
+    }));
+    const limited = applyFolderTextBudget(documents);
+    expect(limited.reduce((sum, item) => sum + item.retainedCharacters, 0)).toBe(120_000);
+    expect(limited[4]).toMatchObject({ status: "partial", truncated: true, retainedCharacters: 0 });
+  });
+});
+
+describe("monotonic outbound safety", () => {
+  const baseAnalysis = {
+    clientNeed: "Working capital for a US operating company",
+    businessDescription: "US distributor with receivables",
+    sector: "Wholesale distribution",
+    jurisdiction: "United States",
+    requestedAmountText: "USD 5 million",
+    recommendedProduct: "Working Capital Against Revenue" as const,
+    productConfidence: "high" as const,
+    readiness: "provider_ready" as const,
+    whyThisProduct: "Receivables support the request.",
+    providedItems: ["Capital request", "Use of funds", "Receivables", "US entity"],
+    notLocatedItems: [],
+    redFlags: [],
+    bestNextAction: "Contact a provider.",
+    evidence: [
+      { claim: "Capital request and working-capital purpose", fileName: "request.pdf", quote: "capital request for working capital" },
+      { claim: "Receivables repayment source and US company", fileName: "aging.pdf", quote: "United States company repays from accounts receivable" },
+    ],
+  };
+  const bundle = {
+    dealId: "d", folderName: "Deal", inventoryCount: 2, readableCount: 2, partialCount: 0, emptyCount: 0, unsupportedCount: 0, tooLargeCount: 0, failedCount: 0, extractedCharacters: 100, contentHash: "h", documents: [],
+  } as any;
+  const deal = { id: "d", status: "active", duplicateOf: null, duplicateReason: null, duplicateReviewReason: null } as any;
+
+  it("never downgrades closed or funded into verification or outreach", () => {
+    expect(enforceStatusSafety({ ...baseAnalysis }, { ...deal, status: "funded" }, { ...bundle, partialCount: 1 }).readiness).toBe("do_not_contact");
+    expect(enforceStatusSafety({ ...baseAnalysis }, { ...deal, status: "closed" }, { ...bundle, failedCount: 1 }).readiness).toBe("do_not_contact");
+  });
+
+  it("blocks outreach when any extraction is partial, empty, unsupported, oversized, or failed", () => {
+    for (const field of ["partialCount", "emptyCount", "unsupportedCount", "tooLargeCount", "failedCount"] as const) {
+      expect(enforceStatusSafety({ ...baseAnalysis }, deal, { ...bundle, [field]: 1 }).readiness).toBe("needs_verification");
+    }
+  });
+});
+
+describe("continuous browser safety and simple routing", () => {
+  it("rechecks freshness while the tab stays open and before every data action", () => {
+    const app = fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8");
+    expect(app).toMatch(/setInterval\(refreshOperatingState, 60_000\)/);
+    expect(app).toMatch(/visibilitychange/);
+    expect(app).toMatch(/window\.addEventListener\("focus", refreshOperatingState\)/);
+    expect(app).toMatch(/dataAction && !refreshOperatingState\(\)/);
+    expect(app).not.toMatch(/<a[^>]+target="_blank"/);
+    expect(app).toMatch(/data-open-drive/);
+    expect(app).toMatch(/window\.open\(url, "_blank", "noopener,noreferrer"\)/);
+  });
+
+  it("routes View every file to All Files and exposes the per-document ledger", () => {
+    const html = fs.readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
+    const app = fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8");
+    expect(html).toMatch(/id="all-advice-button"[^>]+data-view="pipeline"/);
+    expect(app).toMatch(/Document read ledger/);
+    expect(app).toMatch(/originalCharacters/);
+    expect(app).toMatch(/providedEvidence/);
   });
 });

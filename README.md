@@ -7,7 +7,7 @@ This repository publishes an encrypted, mobile-ready read-only evidence viewer f
 | Area | Literal meaning |
 |---|---|
 | Today | A seven-file operating plan balancing decisions, verification, screening/qualification, and guarded re-engagement. Every action has an owner, due time, reason, three steps, and a finish line. It is not a fundability ranking. |
-| File Advice | One evidence-gated next action for every included Drive folder, including explicit do-not-contact handling for terminal files. Outreach-ready cards include the contact found in Drive, recipient-perspective role-play, an initial draft, and the approved 48-hour, 72-hour, one-week, and 30-day cadence. Messages remain blocked on conflict, verification, or terminal files. |
+| Products & Providers | One full-document-gated record for every included Drive folder: client need, AFG product, exact source quotes, provided items, checklist limits, extraction ledger, advisory route, and eligible provider candidates. External drafts remain blocked unless lifecycle, extraction, product, evidence, exact USD amount, currency, geography, and provider-range gates all pass. |
 | Company Strategy | Five operating priorities derived from aggregate dashboard facts, each with an owner, due time, action, reason, and measurable finish line. |
 | Blue Ocean | Three explicitly labeled, unvalidated service hypotheses with a small test, owner, and success condition. These are tests—not forecasts or established demand. |
 | Advisory Board | Three independent AI-generated decision lenses covering capital discipline, product simplicity, and first-principles scale, plus an explicit consensus/disagreement synthesis. The named-person labels describe styles only and are not statements, affiliations, endorsements, or advice from those people. |
@@ -25,13 +25,14 @@ This repository publishes an encrypted, mobile-ready read-only evidence viewer f
 - Exact client-stated requests remain separate from verified eligible, approved, fee-eligible, contracted, or earned amounts.
 - Currencies are never combined; non-USD values are not included in the USD screen.
 - Historical 3% arithmetic remains in the upstream extraction layer for audit compatibility, but it is not emitted in the published encrypted dashboard schema, rendered, or used for decisions.
-- Filename-only indicators are not missing-document findings and cannot generate recipient requests.
+- Every inventoried document is reconciled to complete, partial, empty, unsupported, oversized, or failed. Only exact quotes from completely read documents may support a displayed “provided” claim. If any document is not completely readable, absence claims and external outreach are blocked.
+- Provider candidates must pass exact product, source-quote evidence, exact USD amount, currency, geography, and stated range gates. A public candidate is never labeled as an existing AFG relationship and cannot outrank an eligible confirmed relationship.
 - High-confidence structured request evidence takes precedence over summary text. A conflicting summary cannot silently override it; the amount is cleared and sent to human review.
 - Every unresolved duplicate candidate—including the provisional primary—is excluded from operational totals and request-evidence screens pending a merge-or-separate decision.
 
 ## Freshness and safety
 
-The browser locks totals and decision ordering when any of the following is true: the timestamp is invalid or materially future-dated; the artifact is older than 20 hours; no post-5:00 a.m. Eastern snapshot exists after the morning deadline; the source is not the authenticated Drive API; returned-scope folder counts do not reconcile; evidence reads failed; or manifest and snapshot identifiers do not reconcile. This is a display guardrail, not proof that an unattended morning refresh occurred.
+The browser rechecks freshness every minute, on focus, on visibility return, on navigation, and before every Drive/data action. It locks all data views when any of the following is true: the timestamp is invalid or materially future-dated; the artifact is older than 20 hours; no post-5:00 a.m. Eastern snapshot exists after the morning deadline; the source is not the authenticated Drive API; returned-scope folder counts do not reconcile; evidence reads failed; manifest and snapshot identifiers do not reconcile; or the artifact is not bound to an exact source commit. This is a display guardrail, not proof that an unattended morning refresh occurred.
 
 The encrypted envelope uses ECDH P-256, HKDF-SHA256, and AES-256-GCM. The recipient private key is not stored in the repository or deployed artifact. The current GitHub Pages access model is public encrypted content protected by a shared link/key, not identity-aware access control; it provides no individual authorization, revocation, or access logging.
 
@@ -43,4 +44,4 @@ An unattended GitHub Actions workflow is deliberately not published because the 
 
 ## Verification
 
-Run `pnpm install --frozen-lockfile` and `pnpm main`. The release command executes strict TypeScript checking, the regression suite, a source secret scan, authenticated source collection, fail-closed validation, encryption, static build, and source-to-artifact parity. `scripts/deploy-pages.sh` updates only the `gh-pages` artifact, verifies the public timestamp and SHA-256 envelope hash, and writes a protected release receipt.
+Run `pnpm install --frozen-lockfile` and `pnpm main`. The release command executes strict TypeScript checking, the regression suite, a source secret scan, authenticated source collection, complete extraction reconciliation, fail-closed analysis, encryption, static build, and source-to-artifact parity. `scripts/deploy-pages.sh` refuses dirty or uncommitted source, requires local HEAD to equal protected remote `main`, injects that source commit into the encrypted manifest, updates only the `gh-pages` artifact, verifies every public artifact hash and exact file set, and writes a protected release receipt.

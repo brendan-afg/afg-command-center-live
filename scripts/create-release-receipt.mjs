@@ -44,6 +44,7 @@ decipher.setAuthTag(packed.subarray(packed.length - 16));
 const payload = JSON.parse(Buffer.concat([decipher.update(packed.subarray(0, packed.length - 16)), decipher.final()]).toString("utf8"));
 const sourceCommit = (await github("commits/main")).sha;
 const pagesCommit = (await github("commits/gh-pages")).sha;
+if (payload?.manifest?.sourceCommit !== sourceCommit) throw new Error(`Snapshot source commit ${payload?.manifest?.sourceCommit || "missing"} does not match remote main ${sourceCommit}`);
 const receipt = {
   createdAt: new Date().toISOString(),
   sourceCommit,
@@ -57,6 +58,12 @@ const receipt = {
   scannedFolders: payload.source.scannedFolders,
   failedFolderCount: payload.source.failedFolderCount,
   evidenceReadErrorCount: payload.source.evidenceReadErrorCount,
+  fullDocumentInventory: payload.manifest.fullDocumentInventory,
+  fullDocumentReadable: payload.manifest.fullDocumentReadable,
+  fullDocumentPartial: payload.manifest.fullDocumentPartial,
+  fullDocumentEmpty: payload.manifest.fullDocumentEmpty,
+  fullDocumentUnsupported: payload.manifest.fullDocumentUnsupported,
+  fullDocumentTooLarge: payload.manifest.fullDocumentTooLarge,
   decisionCount: payload.decisionQueue.total,
   requestEvidenceCount: payload.moneyQueue.total,
   totalsByCurrency: payload.totalsByCurrency,
@@ -65,8 +72,10 @@ const receipt = {
     exactRemoteArtifactSetMatches: true,
     internalValidation: payload.manifest.internalValidation,
     independentCompletenessAttestation: payload.manifest.independentCompletenessAttestation,
-    testsPassed: 25,
+    testsPassed: 39,
     sourceArtifactParity: true,
+    cleanCommittedSource: true,
+    snapshotSourceCommitMatchesRemoteMain: true,
     secretScan: "passed",
   },
 };
