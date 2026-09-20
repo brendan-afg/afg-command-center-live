@@ -9,7 +9,7 @@ let operatingState = { locked: true, reasons: ["Data has not loaded"], ageHours:
 const titles = {
   command: ["Today", "Seven actions for today—each with an owner and finish line."],
   pipeline: ["All Files", "Every file currently shown on the dashboard."],
-  actions: ["File Advice", "A concrete next move for every file."],
+  actions: ["Products & Providers", "What each client needs, what AFG can offer, what is not located, and who may fit."],
   strategy: ["Company Strategy", "What AFG should change, test, and finish next."],
   board: ["Advisory Board", "Three independent AI decision lenses on today's company facts."],
   intelligence: ["All Decisions", "Open the evidence, decide what is true, and record the result."],
@@ -45,6 +45,7 @@ async function decrypt(envelope, privateFragmentKey) {
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
 const safeDriveUrl = safeDriveFolderUrl;
+const driveButton = (url, label) => `<button class="secondary" data-open-drive="${escapeHtml(safeDriveUrl(url))}">${escapeHtml(label)}</button>`;
 const formatDate = value => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }).format(new Date(value)) + " ET" : "Not available";
 const formatAmount = (amount, currency) => amount == null || !currency ? "No exact amount found" : new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
 const statusLabel = value => ({
@@ -72,6 +73,33 @@ const decisionReason = item => {
 };
 const actionStateLabel = value => ({ DECIDE: "Decide", VERIFY_FIRST: "Verify first", QUALIFY: "Qualify", SCREEN: "Screen", REENGAGE: "Re-engage", DO_NOT_CONTACT: "Do not contact" }[value] || value);
 const actionTone = value => ({ DECIDE: "critical", VERIFY_FIRST: "critical", QUALIFY: "high", SCREEN: "medium", REENGAGE: "medium", DO_NOT_CONTACT: "muted" }[value] || "medium");
+const readinessLabel = value => ({ provider_ready: "Ready for provider fit check", advisory_first: "Sell advisory first", needs_verification: "Verify before outreach", do_not_contact: "Do not contact" }[value] || "Needs review");
+const readinessTone = value => ({ provider_ready: "high", advisory_first: "medium", needs_verification: "critical", do_not_contact: "muted" }[value] || "medium");
+
+function bulletList(items, empty) {
+  return items?.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">${escapeHtml(empty)}</p>`;
+}
+
+function communicationBlock(title, message) {
+  if (!message) return "";
+  return `<details class="message-block"><summary>${escapeHtml(title)}</summary><div class="roleplay"><span>How the reader is likely to react</span><p>${escapeHtml(message.roleplay)}</p></div>${message.guard ? `<p class="record-warning">${escapeHtml(message.guard)}</p>` : ""}<pre>${escapeHtml(message.draft)}</pre></details>`;
+}
+
+function providerBlock(matches) {
+  if (!matches?.length) return `<div class="provider-empty"><strong>No verified provider match yet.</strong><p>Finish the checklist or add a vetted provider for this product. The dashboard will not invent a name.</p></div>`;
+  return `<div class="provider-grid">${matches.map(provider => `<article class="provider-card"><div class="provider-head"><div><span class="plain-label">${escapeHtml(provider.confidenceLabel)}</span><h4>${escapeHtml(provider.company)}</h4></div><span class="status ${provider.matchState === "ready_to_confirm" ? "high" : "medium"}">${provider.matchState === "ready_to_confirm" ? "Confirm current fit" : "Confirm program first"}</span></div><p><strong>Contact:</strong> ${escapeHtml(provider.contactName)}${provider.title ? ` · ${escapeHtml(provider.title)}` : ""}<br>${[provider.email, provider.phone].filter(Boolean).map(escapeHtml).join(" · ") || "Use the official provider profile"}</p><p><strong>Published range:</strong> ${provider.minimumUsd == null ? "No verified minimum" : formatAmount(provider.minimumUsd, "USD")} to ${provider.maximumUsd == null ? "no verified maximum" : formatAmount(provider.maximumUsd, "USD")}</p><p><strong>Geography:</strong> ${escapeHtml(provider.geographies.join(", "))}</p><p><strong>Why it may fit:</strong> ${escapeHtml(provider.fit)}</p><details><summary>Role-play and fit-check draft</summary><div class="roleplay"><span>Provider's likely reaction</span><p>${escapeHtml(provider.roleplay)}</p></div><pre>${escapeHtml(provider.draft)}</pre><small>Capability evidence: ${escapeHtml(provider.evidenceSource)} · ${escapeHtml(provider.evidenceLocator)} · ${escapeHtml(provider.evidenceDate)}<br>Contact evidence: ${escapeHtml(provider.contactEvidenceSource)} · verified ${escapeHtml(provider.contactVerifiedAt)}</small></details></article>`).join("")}</div>`;
+}
+
+function fullAnalysisCard(item, compact = false) {
+  const order = item.order ? `<span class="action-number">${escapeHtml(item.order)}</span>` : "";
+  const amount = formatAmount(item.exactAmount, item.currency);
+  const action = item.todayAction || item.bestNextAction;
+  const incomplete = item.readCoverage.partialCount + item.readCoverage.emptyCount + item.readCoverage.unsupportedCount + item.readCoverage.tooLargeCount + item.readCoverage.failedCount;
+  const provided = item.providedEvidence?.length ? `<ul>${item.providedEvidence.map(entry => `<li><strong>${escapeHtml(entry.claim)}</strong><br><small>${escapeHtml(entry.fileName)}: “${escapeHtml(entry.quote)}”</small></li>`).join("")}</ul>` : `<p class="muted">No provided-item claim has a complete, exact source quote yet.</p>`;
+  const ledger = (item.documentLedger || []).map(document => `<tr><td>${escapeHtml(document.fileName)}</td><td>${escapeHtml(document.status)}</td><td>${escapeHtml(document.method)}</td><td>${escapeHtml(document.retainedCharacters)} / ${escapeHtml(document.originalCharacters)}</td><td>${escapeHtml(document.note || "Complete")}</td></tr>`).join("");
+  const details = compact ? "" : `<details class="analysis-details"><summary>See documents, checklist, advisory, and providers</summary><div class="analysis-grid"><section><h4>What the file is about</h4><p>${escapeHtml(item.businessDescription)}</p><p><strong>Sector:</strong> ${escapeHtml(item.sector)} · <strong>Place:</strong> ${escapeHtml(item.jurisdiction)}</p><p><strong>Request found:</strong> ${escapeHtml(item.requestedAmountText || amount)}</p></section><section><h4>What is confirmed in the file</h4>${provided}</section><section><h4>What was not located</h4>${incomplete ? `<p class="warning">Not shown because at least one document was not completely readable. Check the ledger and Drive.</p>` : bulletList(item.notLocatedItems, "No checklist gap was identified from complete readable contents.")}</section><section><h4>Read coverage</h4><p>${escapeHtml(item.readCoverage.readableCount)} complete · ${escapeHtml(item.readCoverage.partialCount)} partial · ${escapeHtml(item.readCoverage.emptyCount)} empty · ${escapeHtml(item.readCoverage.unsupportedCount)} unsupported · ${escapeHtml(item.readCoverage.tooLargeCount)} oversized · ${escapeHtml(item.readCoverage.failedCount)} failed.</p>${incomplete ? `<p class="warning">External outreach is blocked until every affected document is reviewed.</p>` : `<p>Every inventoried document reached a complete readable state.</p>`}</section></div>${item.advisoryOffer ? `<article class="advisory-offer"><span class="plain-label">AFG SERVICE TO OFFER</span><h4>${escapeHtml(item.advisoryOffer.service)}</h4><p>${escapeHtml(item.advisoryOffer.why)}</p>${bulletList(item.advisoryOffer.deliverables, "")}${communicationBlock("Role-play and advisory message", item.advisoryOffer)}</article>` : ""}${communicationBlock("Client checklist and ready-to-send message", item.clientChecklistMessage)}<section class="provider-section"><h4>Eligible provider candidates</h4>${providerBlock(item.providerMatches)}</section><details><summary>Evidence used</summary>${(item.evidence || []).length ? item.evidence.map(entry => `<blockquote><strong>${escapeHtml(entry.claim)}</strong><br>${escapeHtml(entry.fileName)}: “${escapeHtml(entry.quote)}”</blockquote>`).join("") : `<p>No short source quote passed exact validation; open Drive before acting.</p>`}</details><details><summary>Document read ledger (${escapeHtml(item.readCoverage.inventoryCount)})</summary><div class="ledger-wrap"><table class="read-ledger"><thead><tr><th>File</th><th>Result</th><th>Method</th><th>Kept / found</th><th>Note</th></tr></thead><tbody>${ledger}</tbody></table></div></details></details>`;
+  return `<article class="action-card ${escapeHtml(readinessTone(item.readiness))}"><div class="action-heading">${order}<div><span class="plain-label">${escapeHtml(readinessLabel(item.readiness))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(readinessTone(item.readiness))}">${escapeHtml(item.recommendedProduct)}</span></div><p class="action-main">${escapeHtml(action)}</p><p><strong>Client wants:</strong> ${escapeHtml(item.clientNeed)}</p>${item.topReason ? `<p><strong>Why this file:</strong> ${escapeHtml(item.topReason)}</p>` : ""}<div class="owner-row"><span><strong>Product:</strong> ${escapeHtml(item.recommendedProduct)}</span><span><strong>Confidence:</strong> ${escapeHtml(item.productConfidence)}</span></div><p class="finish-line"><strong>Why this product:</strong> ${escapeHtml(item.whyThisProduct)}</p><div class="card-actions">${driveButton(item.driveUrl, "Open folder in Drive")}${compact ? `<button class="secondary" data-analysis="${escapeHtml(item.dealId)}">Read full file advice</button>` : ""}</div>${details}</article>`;
+}
 
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active-view", node.id === view));
@@ -96,7 +124,7 @@ function evidenceBlock(evidence) {
 }
 
 function decisionCard(item) {
-  return `<article class="decision-card"><div class="priority-body"><div class="priority-top"><div><span class="plain-label">${escapeHtml(decisionLabel(item))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(item.severity)}">${escapeHtml(urgencyLabel(item.severity))}</span></div><p class="decision-question"><strong>Check this:</strong> ${escapeHtml(decisionQuestion(item))}</p><div class="card-actions primary-action"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div><p class="simple-reason"><strong>Why:</strong> ${escapeHtml(decisionReason(item))}</p><details class="evidence-details"><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`;
+  return `<article class="decision-card"><div class="priority-body"><div class="priority-top"><div><span class="plain-label">${escapeHtml(decisionLabel(item))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(item.severity)}">${escapeHtml(urgencyLabel(item.severity))}</span></div><p class="decision-question"><strong>Check this:</strong> ${escapeHtml(decisionQuestion(item))}</p><div class="card-actions primary-action">${driveButton(item.driveUrl, "Open folder in Drive")}</div><p class="simple-reason"><strong>Why:</strong> ${escapeHtml(decisionReason(item))}</p><details class="evidence-details"><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`;
 }
 
 function advisoryLenses(item) {
@@ -115,7 +143,7 @@ function actionCard(item, compact = false) {
   const steps = compact ? "" : `<details><summary>Show the three steps</summary><ol>${(item.steps || []).map(step => `<li>${escapeHtml(step)}</li>`).join("")}</ol></details>`;
   const board = compact ? "" : `<details><summary>Advisory board on this file</summary>${advisoryLenses(item)}</details>`;
   const message = compact ? "" : messageBlock(item);
-  return `<article class="action-card ${escapeHtml(actionTone(item.actionState))}"><div class="action-heading">${order}<div><span class="plain-label">${escapeHtml(actionStateLabel(item.actionState))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(actionTone(item.actionState))}">${escapeHtml(item.due)}</span></div><p class="action-main">${escapeHtml(item.action)}</p><div class="owner-row"><span><strong>Owner:</strong> ${escapeHtml(item.owner)}</span><span><strong>Product:</strong> ${escapeHtml(item.instrument)}</span></div><p><strong>Why:</strong> ${escapeHtml(item.why)}</p><p class="finish-line"><strong>Done when:</strong> ${escapeHtml(item.finishLine)}</p><div class="card-actions"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a>${compact ? `<button class="secondary" data-advice="${escapeHtml(item.dealId)}">View full advice</button>` : ""}</div>${steps}${message}${board}</article>`;
+  return `<article class="action-card ${escapeHtml(actionTone(item.actionState))}"><div class="action-heading">${order}<div><span class="plain-label">${escapeHtml(actionStateLabel(item.actionState))}</span><h3>${escapeHtml(item.name)}</h3></div><span class="status ${escapeHtml(actionTone(item.actionState))}">${escapeHtml(item.due)}</span></div><p class="action-main">${escapeHtml(item.action)}</p><div class="owner-row"><span><strong>Owner:</strong> ${escapeHtml(item.owner)}</span><span><strong>Product:</strong> ${escapeHtml(item.instrument)}</span></div><p><strong>Why:</strong> ${escapeHtml(item.why)}</p><p class="finish-line"><strong>Done when:</strong> ${escapeHtml(item.finishLine)}</p><div class="card-actions">${driveButton(item.driveUrl, "Open folder in Drive")}${compact ? `<button class="secondary" data-advice="${escapeHtml(item.dealId)}">View full advice</button>` : ""}</div>${steps}${message}${board}</article>`;
 }
 
 function renderCommand() {
@@ -129,14 +157,14 @@ function renderCommand() {
     : `<div><strong>Data is current</strong><p>Updated ${escapeHtml(formatDate(state.generatedAt))}. ${escapeHtml(state.visibleFolderCount)} files are shown.</p>${state.securityWarnings?.length ? `<details class="security-warning"><summary>Drive sharing warning</summary><p>Anyone with the link can open the main Drive folder. Remove public sharing.</p></details>` : ""}</div>`;
   const totals = operatingState.locked ? "—" : state.totalsByCurrency.length ? state.totalsByCurrency.map(total => `${formatAmount(total.amount, total.currency)} USD`).join(" · ") : "$0 USD";
   $("#metric-grid").innerHTML = [
-    metric("Decisions needed", operatingState.locked ? "—" : String(state.decisionQueue.total), "Files where the information does not agree", "red"),
+    metric("Provider fit check", operatingState.locked ? "—" : String(state.fullAnalysis.coverage.providerReady), "Files with a clear product path and readable evidence", "green"),
+    metric("Advisory first", operatingState.locked ? "—" : String(state.fullAnalysis.coverage.advisoryFirst), "Files to package before provider outreach", "blue"),
     metric("USD requests found", totals, operatingState.locked ? "Unavailable" : `${state.moneyQueue.total} files. These are requests, not approved deals.`, "blue"),
-    metric("Files shown", operatingState.locked ? "—" : String(state.visibleFolderCount), "Files included on this dashboard", "navy"),
-    metric("Changed in 24 hours", operatingState.locked ? "—" : String(state.changedInLast24Hours), "A Drive file changed; this may not be a client reply", "green"),
+    metric("Files analyzed", operatingState.locked ? "—" : String(state.fullAnalysis.coverage.filesAnalyzed), `${state.manifest.fullDocumentReadable} documents read completely in this refresh`, "navy"),
   ].join("");
   $("#today-plan").innerHTML = operatingState.locked
     ? `<div class="empty danger">Today's actions are hidden until current information is available.</div>`
-    : state.todayPlan.items.map(item => actionCard(item, true)).join("") || `<div class="empty success">No approved action is available today.</div>`;
+    : state.fullAnalysis.topFiles.items.map(item => fullAnalysisCard(item, true)).join("") || `<div class="empty success">No evidence-backed action is available today.</div>`;
   $("#priority-list").innerHTML = operatingState.locked
     ? `<div class="empty danger">Today's list is hidden until current information is available.</div>`
     : state.decisionQueue.items.slice(0, 2).map(decisionCard).join("") || `<div class="empty success">Nothing needs a decision right now.</div>`;
@@ -145,7 +173,8 @@ function renderCommand() {
 
 function dealCard(deal) {
   const warnings = [deal.duplicateOf ? "Possible duplicate" : null, deal.duplicateReason || deal.duplicateReviewReason ? "Duplicate check needed" : null, deal.evidenceReadErrorCount ? "A file could not be read" : null].filter(Boolean);
-  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))}</p></div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>Changed ${deal.daysSinceUpdate} days ago</span></div>${warnings.length ? `<p class="warning">${escapeHtml([...new Set(warnings)].join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-advice="${escapeHtml(deal.id)}">View advice</button><button class="secondary" data-deal="${escapeHtml(deal.id)}">View details</button><a href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open Drive</a></div></article>`;
+  const analysis = state.fullAnalysis.items.find(item => item.dealId === deal.id);
+  return `<article class="deal-card"><div><h3>${escapeHtml(deal.name)}</h3><p>${escapeHtml(statusLabel(deal.status))}</p>${analysis ? `<p><strong>${escapeHtml(analysis.recommendedProduct)}</strong> · ${escapeHtml(readinessLabel(analysis.readiness))}</p>` : ""}</div><div class="deal-metrics"><span>${escapeHtml(formatAmount(deal.amount, deal.currency))}</span><span>${deal.documentCount} files</span><span>Changed ${deal.daysSinceUpdate} days ago</span></div>${warnings.length ? `<p class="warning">${escapeHtml([...new Set(warnings)].join(" · "))}</p>` : ""}<div class="card-actions"><button class="secondary" data-analysis="${escapeHtml(deal.id)}">Read full file advice</button><button class="secondary" data-deal="${escapeHtml(deal.id)}">View details</button>${driveButton(deal.driveUrl, "Open Drive")}</div></article>`;
 }
 
 function renderDeals() {
@@ -170,8 +199,8 @@ function renderFileAdvice() {
   }
   const term = $("#advice-search").value.trim().toLowerCase();
   const filter = $("#action-filter").value;
-  const items = state.fileAdvice.filter(item => (!term || item.name.toLowerCase().includes(term)) && (filter === "all" || item.actionState === filter));
-  $("#file-advice-list").innerHTML = items.map(item => actionCard(item)).join("") || `<div class="empty">No matching file advice.</div>`;
+  const items = state.fullAnalysis.items.filter(item => (!term || `${item.name} ${item.recommendedProduct} ${item.clientNeed}`.toLowerCase().includes(term)) && (filter === "all" || item.readiness === filter));
+  $("#file-advice-list").innerHTML = items.map(item => fullAnalysisCard(item)).join("") || `<div class="empty">No matching file analysis.</div>`;
 }
 
 function renderStrategy() {
@@ -198,13 +227,13 @@ function renderIntelligence() {
   const duplicateItems = all.filter(item => !item.blockers.includes("status_or_amount") && item.blockers.includes("duplicate_resolution"));
   const renderGroup = items => items.map(decisionCard).join("") || `<div class="empty success">None right now.</div>`;
   const decisions = operatingState.locked ? `<div class="empty danger">Decisions are hidden because the information is not current.</div>` : `<details class="decision-group" open><summary>Information that does not match (${statusItems.length})</summary>${renderGroup(statusItems)}</details><details class="decision-group"><summary>Possible duplicates (${duplicateItems.length})</summary>${renderGroup(duplicateItems)}</details>`;
-  const money = operatingState.locked ? `<div class="empty danger">USD requests are hidden because the information is not current.</div>` : state.moneyQueue.items.map(item => `<article class="money-card"><div><div class="priority-top"><h3>${escapeHtml(item.name)}</h3><strong>${escapeHtml(formatAmount(item.amount, item.currency))}</strong></div><p>This is an amount written in the file. It is not approved or confirmed fundable.</p><div class="card-actions"><a href="${escapeHtml(safeDriveUrl(item.driveUrl))}" target="_blank" rel="noopener noreferrer">Open folder in Drive</a></div><details><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`).join("") || `<div class="empty">No exact USD requests of at least $1 million are shown.</div>`;
+  const money = operatingState.locked ? `<div class="empty danger">USD requests are hidden because the information is not current.</div>` : state.moneyQueue.items.map(item => `<article class="money-card"><div><div class="priority-top"><h3>${escapeHtml(item.name)}</h3><strong>${escapeHtml(formatAmount(item.amount, item.currency))}</strong></div><p>This is an amount written in the file. It is not approved or confirmed fundable.</p><div class="card-actions">${driveButton(item.driveUrl, "Open folder in Drive")}</div><details><summary>Show the evidence</summary>${evidenceBlock(item.evidence)}</details></div></article>`).join("") || `<div class="empty">No exact USD requests of at least $1 million are shown.</div>`;
   $("#intelligence-list").innerHTML = `<section class="panel"><div class="panel-head"><div><p class="eyebrow">DECIDE</p><h2>All ${escapeHtml(state.decisionQueue.total)} decisions</h2></div></div>${decisions}</section><section class="panel"><div class="panel-head"><div><p class="eyebrow">CHECK</p><h2>USD requests found in files</h2></div><span class="badge">${state.moneyQueue.total} files</span></div>${money}</section>`;
 }
 
 function renderSources() {
   const rows = [
-    ["Google Drive", state.sourceHealth.googleDrive, `${state.source.scannedFolders} folders checked · ${state.visibleFolderCount} shown`],
+    ["Google Drive", state.sourceHealth.googleDrive, `${state.source.scannedFolders} folders checked · ${state.manifest.fullDocumentReadable} complete · ${state.manifest.fullDocumentPartial} partial · ${state.manifest.fullDocumentEmpty} empty · ${state.manifest.fullDocumentUnsupported} unsupported · ${state.manifest.fullDocumentTooLarge} oversized · ${state.manifest.fullDocumentFailed} failed`],
     ["ActiveCampaign", state.sourceHealth.activeCampaign, state.sourceHealth.activeCampaign.connected ? `${state.sourceHealth.activeCampaign.contactsTotal.toLocaleString()} contacts found` : state.sourceHealth.activeCampaign.reason],
     ["Calendly", state.sourceHealth.calendly, state.sourceHealth.calendly.connected ? `${state.sourceHealth.calendly.upcomingEvents} upcoming events found` : state.sourceHealth.calendly.reason],
     ["MeetAlfred", state.sourceHealth.meetAlfred, state.sourceHealth.meetAlfred.connected ? `${state.sourceHealth.meetAlfred.campaignsTotal} campaigns found` : state.sourceHealth.meetAlfred.reason],
@@ -212,25 +241,66 @@ function renderSources() {
   $("#source-health").innerHTML = `<article class="source-card security-source"><div class="source-icon bad"></div><div><h2>Dashboard access</h2><p><strong>Shared-link access</strong></p><small>Anyone with this full dashboard link can open it. There are no individual logins, revocation controls, or access logs. The main Drive folder also still allows anyone with its link to open it.</small></div></article>` + rows.map(([name, source, detail]) => `<article class="source-card"><div class="source-icon ${source.connected ? "ok" : "bad"}"></div><div><h2>${escapeHtml(name)}</h2><p>${escapeHtml(detail || "Not available")}</p><p class="connection-answer"><strong>${source.connected ? "Working" : "Not working"}</strong>${source.joinedToDeals ? " · Used with files" : " · Not matched to files"}</p><small>${escapeHtml(source.limitation || source.decisionUse || source.reason || "No note")}</small></div></article>`).join("") + `<article class="source-card"><div class="source-icon bad"></div><div><h2>Website traffic</h2><p>Not connected</p><small>No website traffic number is shown.</small></div></article>`;
 }
 
+function renderAll() {
+  renderCommand();
+  renderDeals();
+  renderFileAdvice();
+  renderStrategy();
+  renderBoard();
+  renderIntelligence();
+  renderSources();
+}
+
+function refreshOperatingState() {
+  if (!state) return false;
+  const previous = JSON.stringify(operatingState);
+  operatingState = evaluateSnapshot(state);
+  if (previous !== JSON.stringify(operatingState)) {
+    if (operatingState.locked && $("#detail-dialog")?.open) $("#detail-dialog").close();
+    renderAll();
+  }
+  return !operatingState.locked;
+}
+
 function showDetail(id) {
   if (operatingState.locked) return;
   const deal = state.deals.find(item => item.id === id);
   if (!deal) return;
   const evidence = deal.statusEvidence || deal.amountEvidence;
-  $("#dialog-content").innerHTML = `<p class="eyebrow">FILE DETAILS</p><h2>${escapeHtml(deal.name)}</h2><dl><dt>What we know</dt><dd>${escapeHtml(statusLabel(deal.status))}</dd><dt>Why</dt><dd>${escapeHtml(deal.statusReason)}</dd><dt>Exact request found</dt><dd>${escapeHtml(formatAmount(deal.amount, deal.currency))}</dd><dt>Evidence file</dt><dd>${escapeHtml(evidence?.fileName || "No short evidence note found")}</dd><dt>Last changed</dt><dd>${escapeHtml(formatDate(deal.lastModified))}</dd><dt>Files in folder</dt><dd>${deal.documentCount}</dd><dt>Duplicate check</dt><dd>${escapeHtml(deal.duplicateOf || deal.duplicateReviewReason ? "Needs a duplicate decision" : "No duplicate signal found")}</dd></dl><a class="primary-link" href="${escapeHtml(safeDriveUrl(deal.driveUrl))}" target="_blank" rel="noopener noreferrer">Open in Google Drive</a>`;
+  $("#dialog-content").innerHTML = `<p class="eyebrow">FILE DETAILS</p><h2>${escapeHtml(deal.name)}</h2><dl><dt>What we know</dt><dd>${escapeHtml(statusLabel(deal.status))}</dd><dt>Why</dt><dd>${escapeHtml(deal.statusReason)}</dd><dt>Exact request found</dt><dd>${escapeHtml(formatAmount(deal.amount, deal.currency))}</dd><dt>Evidence file</dt><dd>${escapeHtml(evidence?.fileName || "No short evidence note found")}</dd><dt>Last changed</dt><dd>${escapeHtml(formatDate(deal.lastModified))}</dd><dt>Files in folder</dt><dd>${deal.documentCount}</dd><dt>Duplicate check</dt><dd>${escapeHtml(deal.duplicateOf || deal.duplicateReviewReason ? "Needs a duplicate decision" : "No duplicate signal found")}</dd></dl>${driveButton(deal.driveUrl, "Open in Google Drive")}`;
   $("#detail-dialog").showModal();
 }
 
 function wire() {
-  $$(`[data-view]`).forEach(node => node.addEventListener("click", () => showView(node.dataset.view)));
+  $$(`[data-view]`).forEach(node => node.addEventListener("click", () => { refreshOperatingState(); showView(node.dataset.view); }));
   $("#deal-search").addEventListener("input", renderDeals);
   $("#status-filter").addEventListener("change", renderDeals);
   $("#advice-search").addEventListener("input", renderFileAdvice);
   $("#action-filter").addEventListener("change", renderFileAdvice);
   $("#dialog-close").addEventListener("click", () => $("#detail-dialog").close());
   document.addEventListener("click", event => {
+    const dataAction = event.target.closest("[data-open-drive],[data-deal],[data-analysis],[data-advice]");
+    if (dataAction && !refreshOperatingState()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    const openDrive = event.target.closest("[data-open-drive]");
+    if (openDrive) {
+      const url = safeDriveUrl(openDrive.dataset.openDrive);
+      if (url !== "#") window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
     const detail = event.target.closest("[data-deal]");
     if (detail) showDetail(detail.dataset.deal);
+    const analysis = event.target.closest("[data-analysis]");
+    if (analysis) {
+      const item = state.fullAnalysis.items.find(record => record.dealId === analysis.dataset.analysis);
+      $("#advice-search").value = item?.name || "";
+      $("#action-filter").value = "all";
+      renderFileAdvice();
+      showView("actions");
+    }
     const advice = event.target.closest("[data-advice]");
     if (advice) {
       const item = state.fileAdvice.find(record => record.dealId === advice.dataset.advice);
@@ -239,7 +309,10 @@ function wire() {
       renderFileAdvice();
       showView("actions");
     }
-  });
+  }, true);
+  window.setInterval(refreshOperatingState, 60_000);
+  window.addEventListener("focus", refreshOperatingState);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshOperatingState(); });
 }
 
 async function unlock(password) {
@@ -252,7 +325,7 @@ async function unlock(password) {
     $("#access-key").value = "";
     $("#unlock").classList.add("hidden");
     $("#app").classList.remove("hidden");
-    renderCommand(); renderDeals(); renderFileAdvice(); renderStrategy(); renderBoard(); renderIntelligence(); renderSources(); wire();
+    renderAll(); wire();
   } catch {
     history.replaceState(null, "", `${location.pathname}${location.search}`);
     $("#access-key").value = "";

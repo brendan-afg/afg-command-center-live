@@ -32,7 +32,7 @@
       <nav id="nav" aria-label="Dashboard navigation">
         <button class="nav-item active" data-view="command">Today</button>
         <button class="nav-item" data-view="pipeline">All Files</button>
-        <button class="nav-item" data-view="actions">File Advice</button>
+        <button class="nav-item" data-view="actions">Products & Providers</button>
         <button class="nav-item" data-view="strategy">Company Strategy</button>
         <button class="nav-item" data-view="board">Advisory Board</button>
         <button class="nav-item" data-view="intelligence">All Decisions</button>
@@ -56,7 +56,7 @@
         <section class="panel start-panel">
           <div class="panel-head">
             <div><p class="eyebrow">DO THIS TODAY</p><h2>Your seven actions</h2></div>
-            <button id="all-advice-button" class="badge" data-view="actions">View every file</button>
+            <button id="all-advice-button" class="badge" data-view="pipeline">View every file</button>
           </div>
           <div id="today-plan" class="action-list"></div>
         </section>
@@ -87,15 +87,13 @@
 
       <section id="actions" class="view">
         <div class="toolbar">
-          <input id="advice-search" type="search" placeholder="Search file advice" aria-label="Search file advice" />
-          <select id="action-filter" aria-label="Filter file advice">
-            <option value="all">All actions</option>
-            <option value="DECIDE">Decide</option>
-            <option value="VERIFY_FIRST">Verify first</option>
-            <option value="QUALIFY">Qualify</option>
-            <option value="SCREEN">Screen</option>
-            <option value="REENGAGE">Re-engage</option>
-            <option value="DO_NOT_CONTACT">Do not contact</option>
+          <input id="advice-search" type="search" placeholder="Search files or products" aria-label="Search files or products" />
+          <select id="action-filter" aria-label="Filter product and provider analysis">
+            <option value="all">All files</option>
+            <option value="provider_ready">Provider fit check</option>
+            <option value="advisory_first">Sell advisory first</option>
+            <option value="needs_verification">Verify first</option>
+            <option value="do_not_contact">Do not contact</option>
           </select>
         </div>
         <div id="file-advice-list" class="action-list"></div>
@@ -125,7 +123,7 @@
     <nav class="bottom-nav" aria-label="Mobile dashboard navigation">
       <button class="active" data-view="command">Today</button>
       <button data-view="pipeline">Files</button>
-      <button data-view="actions">Advice</button>
+      <button data-view="actions">Products</button>
       <button data-view="strategy">Strategy</button>
       <button data-view="board">Board</button>
     </nav>

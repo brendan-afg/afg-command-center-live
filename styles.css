@@ -89,3 +89,36 @@ details.security-warning p{margin:7px 0 0;font-size:13px}
 
 .board-synthesis{grid-column:1/-1;background:#fff;border:2px solid #b8ccec;border-radius:16px;padding:20px}.board-synthesis h2{margin:0 0 10px}.board-synthesis p{color:#475467;line-height:1.5}
 .cadence-list li{margin:10px 0;line-height:1.5}
+
+/* Full-file product and provider analysis */
+.analysis-details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.analysis-details>summary{font-weight:800;color:var(--blue);cursor:pointer;min-height:44px;display:flex;align-items:center}
+.analysis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.analysis-grid section,.advisory-offer,.provider-card,.provider-empty{background:#f8fafc;border:1px solid #d9e2ef;border-radius:14px;padding:16px}
+.analysis-grid h4,.advisory-offer h4,.provider-card h4,.provider-section h4{margin:0 0 8px;color:var(--navy)}
+.analysis-grid ul,.advisory-offer ul{margin:8px 0 0;padding-left:20px}
+.analysis-grid li,.advisory-offer li{margin:6px 0;line-height:1.45}
+.advisory-offer{margin:14px 0;background:#eff6ff;border-color:#acc9f3}
+.provider-section{margin-top:16px}
+.provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+.provider-card{background:#fff}
+.provider-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.provider-card p{line-height:1.5}
+.provider-card details{margin-top:10px}
+.provider-empty{background:#fff8e7;border-color:#ead096}
+.action-heading .status{max-width:220px;text-align:center;line-height:1.25}
+.analysis-details blockquote{margin:10px 0;padding:12px 14px;background:#f7f9fc;border-left:4px solid var(--blue);border-radius:6px;line-height:1.5}
+@media (max-width:720px){
+  .analysis-grid,.provider-grid{grid-template-columns:1fr}
+  .analysis-grid section,.advisory-offer,.provider-card,.provider-empty{padding:13px}
+  .provider-head{display:block}.provider-head .status{display:inline-block;margin-top:8px}
+  .action-heading .status{max-width:none}
+}
+
+/* Evidence and extraction ledger */
+.ledger-wrap{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.read-ledger{width:100%;min-width:760px;border-collapse:collapse;font-size:12px}
+.read-ledger th,.read-ledger td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+.read-ledger th{background:#f4f7fb;color:var(--navy);font-weight:800}
+.read-ledger tr:last-child td{border-bottom:0}
+@media (max-width:640px){.ledger-wrap{margin-inline:-4px}.read-ledger{font-size:11px}}

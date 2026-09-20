@@ -27,5 +27,6 @@ export function evaluateSnapshot(data, now = new Date()) {
   if (data?.source?.connection !== "fresh_snapshot" || data?.source?.failedFolderCount > 0 || data?.source?.evidenceReadErrorCount > 0) reasons.push("Drive collection is not a fresh, error-free snapshot");
   if (!Number.isInteger(data?.source?.totalFolders) || data.source.totalFolders <= 0 || data?.source?.scannedFolders !== data?.source?.totalFolders) reasons.push("Drive folder coverage does not reconcile within the returned authenticated scope");
   if (!data?.manifest?.runId || data?.manifest?.snapshotId !== data?.source?.snapshotId) reasons.push("Deployment manifest and snapshot identifiers do not reconcile");
+  if (!/^[0-9a-f]{40}$/i.test(String(data?.manifest?.sourceCommit || ""))) reasons.push("Snapshot is not bound to a verified source commit");
   return { locked: reasons.length > 0, reasons, ageHours: Number.isFinite(ageHours) ? ageHours : null };
 }
