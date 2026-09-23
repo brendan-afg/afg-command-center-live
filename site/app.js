@@ -1,5 +1,7 @@
-import { evaluateSnapshot } from "./snapshot-policy.js";
-import { safeDriveFolderUrl } from "./url-policy.js";
+import { evaluateSnapshot } from "./snapshot-policy.js?v=__BUILD_VERSION__";
+import { safeDriveFolderUrl } from "./url-policy.js?v=__BUILD_VERSION__";
+
+if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -15,33 +17,6 @@ const titles = {
   intelligence: ["All Decisions", "Open the evidence, decide what is true, and record the result."],
   sources: ["Data Sources", "See which systems are working and what each one provides."],
 };
-
-function bytes(base64) {
-  return Uint8Array.from(atob(base64), char => char.charCodeAt(0));
-}
-
-function fromBase64Url(value) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  return atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
-}
-
-async function decrypt(envelope, privateFragmentKey) {
-  if (envelope.version !== 2 || envelope.algorithm !== "ECDH-P256+HKDF-SHA256+AES-256-GCM") throw new Error("Unsupported encrypted snapshot");
-  const privateJwk = JSON.parse(fromBase64Url(privateFragmentKey));
-  const privateKey = await crypto.subtle.importKey("jwk", privateJwk, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
-  const ephemeralPublicKey = await crypto.subtle.importKey("jwk", envelope.ephemeralPublicKey, { name: "ECDH", namedCurve: "P-256" }, false, []);
-  const sharedSecret = await crypto.subtle.deriveBits({ name: "ECDH", public: ephemeralPublicKey }, privateKey, 256);
-  const keyMaterial = await crypto.subtle.importKey("raw", sharedSecret, "HKDF", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: bytes(envelope.salt), info: new TextEncoder().encode("AFG Dashboard Data v2") },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["decrypt"],
-  );
-  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes(envelope.iv) }, key, bytes(envelope.ciphertext));
-  return JSON.parse(new TextDecoder().decode(plaintext));
-}
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
 const safeDriveUrl = safeDriveFolderUrl;
@@ -238,7 +213,7 @@ function renderSources() {
     ["Calendly", state.sourceHealth.calendly, state.sourceHealth.calendly.connected ? `${state.sourceHealth.calendly.upcomingEvents} upcoming events found` : state.sourceHealth.calendly.reason],
     ["MeetAlfred", state.sourceHealth.meetAlfred, state.sourceHealth.meetAlfred.connected ? `${state.sourceHealth.meetAlfred.campaignsTotal} campaigns found` : state.sourceHealth.meetAlfred.reason],
   ];
-  $("#source-health").innerHTML = `<article class="source-card security-source"><div class="source-icon bad"></div><div><h2>Dashboard access</h2><p><strong>Shared-link access</strong></p><small>Anyone with this full dashboard link can open it. There are no individual logins, revocation controls, or access logs. The main Drive folder also still allows anyone with its link to open it.</small></div></article>` + rows.map(([name, source, detail]) => `<article class="source-card"><div class="source-icon ${source.connected ? "ok" : "bad"}"></div><div><h2>${escapeHtml(name)}</h2><p>${escapeHtml(detail || "Not available")}</p><p class="connection-answer"><strong>${source.connected ? "Working" : "Not working"}</strong>${source.joinedToDeals ? " · Used with files" : " · Not matched to files"}</p><small>${escapeHtml(source.limitation || source.decisionUse || source.reason || "No note")}</small></div></article>`).join("") + `<article class="source-card"><div class="source-icon bad"></div><div><h2>Website traffic</h2><p>Not connected</p><small>No website traffic number is shown.</small></div></article>`;
+  $("#source-health").innerHTML = `<article class="source-card security-source"><div class="source-icon bad"></div><div><h2>Dashboard access</h2><p><strong>Link-only access — no key or login</strong></p><small>Anyone who has this dashboard URL can open the client-level information. The page is marked noindex, but the URL is not an authorization control and there are no individual access logs or revocation controls.</small></div></article>` + rows.map(([name, source, detail]) => `<article class="source-card"><div class="source-icon ${source.connected ? "ok" : "bad"}"></div><div><h2>${escapeHtml(name)}</h2><p>${escapeHtml(detail || "Not available")}</p><p class="connection-answer"><strong>${source.connected ? "Working" : "Not working"}</strong>${source.joinedToDeals ? " · Used with files" : " · Not matched to files"}</p><small>${escapeHtml(source.limitation || source.decisionUse || source.reason || "No note")}</small></div></article>`).join("") + `<article class="source-card"><div class="source-icon bad"></div><div><h2>Website traffic</h2><p>Not connected</p><small>No website traffic number is shown.</small></div></article>`;
 }
 
 function renderAll() {
@@ -315,24 +290,14 @@ function wire() {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshOperatingState(); });
 }
 
-async function unlock(password) {
-  $("#unlock-error").textContent = "Opening…";
+async function loadDashboard() {
   try {
-    const envelope = await fetch(`./data.enc?ts=${Date.now()}`, { cache: "no-store" }).then(response => { if (!response.ok) throw new Error("Snapshot unavailable"); return response.json(); });
-    state = await decrypt(envelope, password);
+    state = await fetch(`./data.json?ts=${Date.now()}`, { cache: "no-store" }).then(response => { if (!response.ok) throw new Error("Snapshot unavailable"); return response.json(); });
     operatingState = evaluateSnapshot(state);
-    history.replaceState(null, "", `${location.pathname}${location.search}`);
-    $("#access-key").value = "";
-    $("#unlock").classList.add("hidden");
-    $("#app").classList.remove("hidden");
     renderAll(); wire();
   } catch {
-    history.replaceState(null, "", `${location.pathname}${location.search}`);
-    $("#access-key").value = "";
-    $("#unlock-error").textContent = "This link or access key is not valid. Use the latest AFG dashboard link.";
+    document.body.innerHTML = `<main class="load-error"><p class="eyebrow">AFG COMMAND CENTER</p><h1>Dashboard unavailable</h1><p>The current snapshot could not be loaded. Please try this link again shortly.</p></main>`;
   }
 }
 
-$("#unlock-form").addEventListener("submit", event => { event.preventDefault(); unlock($("#access-key").value); });
-const hashKey = new URLSearchParams(location.hash.slice(1)).get("key");
-if (hashKey) { history.replaceState(null, "", `${location.pathname}${location.search}`); unlock(hashKey); }
+loadDashboard();

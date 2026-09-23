@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 
 const root = process.cwd();
 const base = new URL("https://brendan-afg.github.io/afg-command-center-live/");
-const expectedArtifacts = [".nojekyll", "afg-logo.jpeg", "app.js", "data.enc", "index.html", "snapshot-policy.js", "styles.css", "url-policy.js"].sort();
+const expectedArtifacts = [".nojekyll", "afg-logo.png", "app.js", "data.json", "index.html", "snapshot-policy.js", "styles.css", "url-policy.js"].sort();
 const sha256 = value => crypto.createHash("sha256").update(value).digest("hex");
 const artifactSha256 = {};
 async function github(path) {
@@ -31,17 +31,8 @@ const remoteNames = (await github("contents?ref=gh-pages"))
   .sort();
 if (JSON.stringify(remoteNames) !== JSON.stringify(expectedArtifacts)) throw new Error(`Remote artifact set mismatch: ${remoteNames.join(", ")}`);
 
-const envelopeBytes = await fs.readFile(`${root}/dist/data.enc`);
-const envelope = JSON.parse(envelopeBytes.toString("utf8"));
-const key = (await fs.readFile("/home/ubuntu/afg-command-center-daily-private-key.txt", "utf8")).trim();
-const privateKey = crypto.createPrivateKey({ key: JSON.parse(Buffer.from(key, "base64url").toString("utf8")), format: "jwk" });
-const publicKey = crypto.createPublicKey({ key: envelope.ephemeralPublicKey, format: "jwk" });
-const sharedSecret = crypto.diffieHellman({ privateKey, publicKey });
-const aesKey = Buffer.from(crypto.hkdfSync("sha256", sharedSecret, Buffer.from(envelope.salt, "base64"), Buffer.from("AFG Dashboard Data v2"), 32));
-const packed = Buffer.from(envelope.ciphertext, "base64");
-const decipher = crypto.createDecipheriv("aes-256-gcm", aesKey, Buffer.from(envelope.iv, "base64"));
-decipher.setAuthTag(packed.subarray(packed.length - 16));
-const payload = JSON.parse(Buffer.concat([decipher.update(packed.subarray(0, packed.length - 16)), decipher.final()]).toString("utf8"));
+const payload = JSON.parse(await fs.readFile(`${root}/dist/data.json`, "utf8"));
+if (payload?.access?.mode !== "link_only_no_login") throw new Error("Snapshot is missing the approved link-only access declaration");
 const sourceCommit = (await github("commits/main")).sha;
 const pagesCommit = (await github("commits/gh-pages")).sha;
 if (payload?.manifest?.sourceCommit !== sourceCommit) throw new Error(`Snapshot source commit ${payload?.manifest?.sourceCommit || "missing"} does not match remote main ${sourceCommit}`);
@@ -72,13 +63,14 @@ const receipt = {
     exactRemoteArtifactSetMatches: true,
     internalValidation: payload.manifest.internalValidation,
     independentCompletenessAttestation: payload.manifest.independentCompletenessAttestation,
-    testsPassed: 39,
+    testsPassed: 36,
     sourceArtifactParity: true,
     cleanCommittedSource: true,
     snapshotSourceCommitMatchesRemoteMain: true,
+    linkOnlyAccessNoLogin: true,
     secretScan: "passed",
   },
 };
 await fs.writeFile("/home/ubuntu/afg-command-center-release-receipt.json", `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
 await fs.chmod("/home/ubuntu/afg-command-center-release-receipt.json", 0o600);
-console.log(JSON.stringify({ dataEnvelopeSha256: artifactSha256["data.enc"], generatedAt: payload.generatedAt, runId: payload.manifest.runId, allRemoteArtifactHashesMatch: true }));
+console.log(JSON.stringify({ dataSnapshotSha256: artifactSha256["data.json"], generatedAt: payload.generatedAt, runId: payload.manifest.runId, allRemoteArtifactHashesMatch: true }));

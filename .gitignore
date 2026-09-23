@@ -7,3 +7,5 @@ dist/
 *service-account*.json
 *credentials*.json
 *credential*.json
+site/data.enc
+site/data.json
