@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEY="/home/ubuntu/.ssh/afg_pages_deploy"
 REMOTE="git@github.com:brendan-afg/afg-command-center-live.git"
-PUBLIC_ENVELOPE="https://brendan-afg.github.io/afg-command-center-live/data.enc"
+PUBLIC_SNAPSHOT="https://brendan-afg.github.io/afg-command-center-live/data.json"
 LOCK="/tmp/afg-command-center-refresh.lock"
 
 exec 9>"$LOCK"
@@ -22,29 +22,30 @@ remote_main=$(GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKe
 export AFG_SOURCE_COMMIT="$source_commit"
 pnpm install --frozen-lockfile
 GITHUB_EVENT_NAME=manual-scheduled-refresh pnpm main
-for artifact in index.html app.js snapshot-policy.js url-policy.js styles.css afg-logo.jpeg data.enc; do
-  cmp -s "site/$artifact" "dist/$artifact" || { echo "Source/artifact mismatch: $artifact" >&2; exit 1; }
-done
+node scripts/verify-artifact.mjs
 
-local_generated=$(node -e "const fs=require('fs');const e=JSON.parse(fs.readFileSync('dist/data.enc','utf8'));process.stdout.write(e.generatedAt)")
+local_generated=$(node -e "const fs=require('fs');const e=JSON.parse(fs.readFileSync('dist/data.json','utf8'));if(e?.access?.mode!=='link_only_no_login')process.exit(1);process.stdout.write(e.generatedAt)")
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" git clone --depth 1 --branch gh-pages "$REMOTE" "$tmp/repo"
 find "$tmp/repo" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -a dist/. "$tmp/repo/"
 cd "$tmp/repo"
+expected_artifacts=$'.nojekyll\nafg-logo.png\napp.js\ndata.json\nindex.html\nsnapshot-policy.js\nstyles.css\nurl-policy.js'
+actual_artifacts=$(find . -mindepth 1 -maxdepth 1 ! -name .git -printf '%f\n' | sort)
+[[ "$actual_artifacts" == "$expected_artifacts" ]] || { echo "Refusing to push unexpected public artifact set:" >&2; printf '%s\n' "$actual_artifacts" >&2; exit 1; }
 git add -A
 if git diff --cached --quiet; then
-  echo "Encrypted dashboard artifact is already current."
+  echo "Link-only dashboard artifact is already current."
 else
   git -c user.name='AFG Command Center' -c user.email='automation@altfundsglobal.com' commit -m "Authenticated daily dashboard refresh ${local_generated}"
   GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" git push origin gh-pages
 fi
 
 for attempt in $(seq 1 24); do
-  remote_generated=$(curl -fsS --max-time 20 "${PUBLIC_ENVELOPE}?verify=${attempt}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).generatedAt||'')}catch{}})" || true)
+  remote_generated=$(curl -fsS --max-time 20 "${PUBLIC_SNAPSHOT}?verify=${attempt}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).generatedAt||'')}catch{}})" || true)
   if [[ "$remote_generated" == "$local_generated" ]]; then
-    echo "Verified encrypted production artifact ${remote_generated}."
+    echo "Verified link-only production artifact ${remote_generated}."
     (cd "$ROOT" && node scripts/create-release-receipt.mjs)
     exit 0
   fi

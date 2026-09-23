@@ -7,28 +7,13 @@
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'" />
   <title>AFG Command Center</title>
-  <link rel="icon" href="./afg-logo.jpeg" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="./afg-logo.png?v=__BUILD_VERSION__" />
+  <link rel="stylesheet" href="./styles.css?v=__BUILD_VERSION__" />
 </head>
 <body>
-  <div id="unlock" class="unlock-shell">
-    <div class="unlock-card">
-      <img src="./afg-logo.jpeg" alt="AltFunds Global" />
-      <p class="eyebrow">PRIVATE</p>
-      <h1>AFG Command Center</h1>
-      <p class="muted">Use the private AFG link or enter the access key.</p>
-      <form id="unlock-form">
-        <label for="access-key">Access key</label>
-        <input id="access-key" type="password" autocomplete="off" spellcheck="false" placeholder="Enter access key" required />
-        <button type="submit">Open dashboard</button>
-      </form>
-      <p id="unlock-error" class="error" role="alert"></p>
-    </div>
-  </div>
-
-  <div id="app" class="app hidden">
+  <div id="app" class="app">
     <aside class="sidebar">
-      <img src="./afg-logo.jpeg" alt="AltFunds Global" class="brand" />
+      <img src="./afg-logo.png?v=__BUILD_VERSION__" alt="AltFunds Global" class="brand" />
       <nav id="nav" aria-label="Dashboard navigation">
         <button class="nav-item active" data-view="command">Today</button>
         <button class="nav-item" data-view="pipeline">All Files</button>
@@ -130,6 +115,6 @@
   </div>
 
   <dialog id="detail-dialog"><button id="dialog-close" class="dialog-close">Close</button><div id="dialog-content"></div></dialog>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=__BUILD_VERSION__"></script>
 </body>
 </html>

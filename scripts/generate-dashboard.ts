@@ -7,7 +7,6 @@ import { readEveryClientFile } from "./full-file-reader";
 import { analyzeEveryDeal } from "./full-deal-analysis";
 
 const SITE_DIR = path.resolve("site");
-const PUBLIC_KEY_PATH = path.resolve("recipient-public-key.json");
 const FETCH_TIMEOUT_MS = 25_000;
 // Founder-approved dashboard exclusions. IDs are used so spelling changes cannot reintroduce a file.
 const DASHBOARD_EXCLUDED_FOLDER_IDS = new Set([
@@ -20,16 +19,6 @@ const DASHBOARD_EXCLUDED_FOLDER_IDS = new Set([
 export function filterDashboardDeals(deals: DriveDealSnapshot[]) {
   return deals.filter(deal => !DASHBOARD_EXCLUDED_FOLDER_IDS.has(deal.id));
 }
-
-type EnvelopeV2 = {
-  version: 2;
-  algorithm: "ECDH-P256+HKDF-SHA256+AES-256-GCM";
-  generatedAt: string;
-  ephemeralPublicKey: crypto.JsonWebKey;
-  salt: string;
-  iv: string;
-  ciphertext: string;
-};
 
 function easternBusinessDate(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -431,6 +420,11 @@ export async function buildDashboardData() {
     sourceHealth,
     deals,
     visibleFolderCount: visibleDriveDeals.length,
+    access: {
+      mode: "link_only_no_login",
+      searchIndexingRequested: false,
+      limitation: "Anyone with the dashboard URL can open the published client-level information. The URL is not an authorization control, and GitHub Pages provides no individual access logs or revocation.",
+    },
     securityWarnings: [
       "The Drive root still reports an anonymous permission. Authenticated ingestion is active, but source confidentiality remains unresolved until a Drive owner removes that permission.",
     ],
@@ -452,36 +446,10 @@ export function assertPublishableSnapshot(snapshot: { failedFolderCount: number;
   }
 }
 
-function toBase64(value: Buffer) {
-  return value.toString("base64");
-}
-
-export function encryptPayload(payload: unknown, recipientPublicJwk: crypto.JsonWebKey): EnvelopeV2 {
-  const recipientPublicKey = crypto.createPublicKey({ key: recipientPublicJwk, format: "jwk" });
-  const ephemeral = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-  const sharedSecret = crypto.diffieHellman({ privateKey: ephemeral.privateKey, publicKey: recipientPublicKey });
-  const salt = crypto.randomBytes(16);
-  const iv = crypto.randomBytes(12);
-  const aesKey = Buffer.from(crypto.hkdfSync("sha256", sharedSecret, salt, Buffer.from("AFG Dashboard Data v2"), 32));
-  const cipher = crypto.createCipheriv("aes-256-gcm", aesKey, iv);
-  const plaintext = Buffer.from(JSON.stringify(payload));
-  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
-  return {
-    version: 2,
-    algorithm: "ECDH-P256+HKDF-SHA256+AES-256-GCM",
-    generatedAt: typeof payload === "object" && payload !== null && "generatedAt" in payload && typeof payload.generatedAt === "string" ? payload.generatedAt : new Date().toISOString(),
-    ephemeralPublicKey: ephemeral.publicKey.export({ format: "jwk" }),
-    salt: toBase64(salt),
-    iv: toBase64(iv),
-    ciphertext: toBase64(ciphertext),
-  };
-}
-
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const recipientPublicJwk = JSON.parse(await fs.readFile(PUBLIC_KEY_PATH, "utf8")) as crypto.JsonWebKey;
   const payload = await buildDashboardData();
   await fs.mkdir(SITE_DIR, { recursive: true });
-  await fs.writeFile(path.join(SITE_DIR, "data.enc"), JSON.stringify(encryptPayload(payload, recipientPublicJwk)));
+  await fs.writeFile(path.join(SITE_DIR, "data.json"), JSON.stringify(payload));
   console.log(JSON.stringify({
     generatedAt: payload.generatedAt,
     runId: payload.manifest.runId,
@@ -494,5 +462,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     moneyScreens: payload.moneyQueue.total,
     currencies: payload.totalsByCurrency.map(item => item.currency),
     sourceMode: payload.manifest.sourceMode,
+    accessMode: "link_only_no_login",
   }));
 }

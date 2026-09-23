@@ -3,7 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const excluded = new Set([".git", "node_modules", "dist"]);
-const excludedFiles = new Set(["site/data.enc", "pnpm-lock.yaml"]);
+const excludedFiles = new Set(["pnpm-lock.yaml"]);
 const rules = [
   ["private key material", /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
   ["Google API key", /AIza[0-9A-Za-z_-]{30,}/],

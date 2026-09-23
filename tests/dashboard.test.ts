@@ -1,7 +1,6 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { assertPublishableSnapshot, buildDecisionQueue, buildMoneyQueue, buildRequestEvidenceTotals, encryptPayload, filterDashboardDeals, gateFileAdviceWithFullAnalysis } from "../scripts/generate-dashboard";
+import { assertPublishableSnapshot, buildDecisionQueue, buildMoneyQueue, buildRequestEvidenceTotals, filterDashboardDeals, gateFileAdviceWithFullAnalysis } from "../scripts/generate-dashboard";
 import { buildDriveSnapshotFromPublicInputs, parseExactAmountValue } from "../server/driveSync";
 import { buildBlueOceanOpportunities, buildCompanyStrategy, buildFileAdvice, buildTodayPlan } from "../scripts/advisory-engine";
 import { enforceStatusSafety, matchProviders, providerEligibility } from "../scripts/full-deal-analysis";
@@ -11,22 +10,6 @@ import { PROVIDERS } from "../scripts/provider-directory";
 import { evaluateSnapshot } from "../site/snapshot-policy.js";
 // @ts-expect-error Browser URL policy is intentionally plain ESM copied directly to the static site.
 import { safeDriveFolderUrl } from "../site/url-policy.js";
-
-function decrypt(envelope: ReturnType<typeof encryptPayload>, privateJwk: crypto.JsonWebKey) {
-  const privateKey = crypto.createPrivateKey({ key: privateJwk, format: "jwk" });
-  const ephemeralPublicKey = crypto.createPublicKey({ key: envelope.ephemeralPublicKey, format: "jwk" });
-  const secret = crypto.diffieHellman({ privateKey, publicKey: ephemeralPublicKey });
-  const aesKey = Buffer.from(crypto.hkdfSync("sha256", secret, Buffer.from(envelope.salt, "base64"), Buffer.from("AFG Dashboard Data v2"), 32));
-  const packed = Buffer.from(envelope.ciphertext, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", aesKey, Buffer.from(envelope.iv, "base64"));
-  decipher.setAuthTag(packed.subarray(packed.length - 16));
-  return JSON.parse(Buffer.concat([decipher.update(packed.subarray(0, -16)), decipher.final()]).toString("utf8"));
-}
-
-function keyPair() {
-  const pair = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-  return { publicJwk: pair.publicKey.export({ format: "jwk" }), privateJwk: pair.privateKey.export({ format: "jwk" }) };
-}
 
 function folder(id: string, name: string, files: Array<{ id: string; name: string; mimeType: string; modifiedTime: string }>, evidenceTextByFileId: Record<string, string>) {
   const modifiedTime = files.map(file => file.modifiedTime).sort().at(-1) || "2026-09-19T00:00:00.000Z";
@@ -46,34 +29,26 @@ function validBrowserSnapshot(generatedAt: string, businessDateEastern: string) 
   };
 }
 
-describe("encrypted dashboard artifact", () => {
-  it("round-trips with the recipient private key", () => {
-    const { publicJwk, privateJwk } = keyPair();
-    const payload = { folders: 192, disclosure: "client-stated—not approved" };
-    expect(decrypt(encryptPayload(payload, publicJwk), privateJwk)).toEqual(payload);
+describe("link-only dashboard access", () => {
+  it("loads directly without a key form and remains marked noindex", () => {
+    const html = fs.readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
+    const app = fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8");
+    expect(html).not.toMatch(/unlock-form|access-key|type="password"|>PRIVATE</);
+    expect(html).toMatch(/name="robots" content="noindex,nofollow,noarchive"/);
+    expect(html).toMatch(/id="app" class="app"/);
+    expect(html).toMatch(/afg-logo\.png/);
+    expect(html).toMatch(/app\.js\?v=__BUILD_VERSION__/);
+    expect(html).toMatch(/styles\.css\?v=__BUILD_VERSION__/);
+    expect(fs.existsSync(new URL("../site/afg-logo.png", import.meta.url))).toBe(true);
+    expect(app).toMatch(/fetch\(`\.\/data\.json\?ts=/);
+    expect(app).toMatch(/loadDashboard\(\)/);
+    expect(app).toMatch(/Link-only access — no key or login/);
+    expect(app).toMatch(/snapshot-policy\.js\?v=__BUILD_VERSION__/);
+    expect(app).toMatch(/url-policy\.js\?v=__BUILD_VERSION__/);
+    expect(app).toMatch(/if \(location\.hash\) history\.replaceState/);
+    expect(app).not.toMatch(/data\.enc|hashKey|access-key|decrypt\(/);
   });
 
-  it("cannot be opened with a different private key", () => {
-    const recipient = keyPair();
-    expect(() => decrypt(encryptPayload({ private: true }, recipient.publicJwk), keyPair().privateJwk)).toThrow();
-  });
-
-  it("publishes no recipient private scalar", () => {
-    const recipient = keyPair();
-    const encrypted = encryptPayload({ safe: true }, recipient.publicJwk);
-    expect(encrypted.ephemeralPublicKey.d).toBeUndefined();
-    expect(recipient.publicJwk.d).toBeUndefined();
-  });
-
-  it("rejects a tampered encrypted payload", () => {
-    const recipient = keyPair();
-    const encrypted = encryptPayload({ private: true }, recipient.publicJwk);
-    const tampered = { ...encrypted, ciphertext: `${encrypted.ciphertext.slice(0, -2)}AA` };
-    expect(() => decrypt(tampered, recipient.privateJwk)).toThrow();
-  });
-});
-
-describe("browser security policy", () => {
   it("allows only canonical Google Drive folder URLs", () => {
     expect(safeDriveFolderUrl("https://drive.google.com/drive/folders/abc_DEF-123")).toBe("https://drive.google.com/drive/folders/abc_DEF-123");
     for (const value of [
@@ -87,14 +62,11 @@ describe("browser security policy", () => {
     ]) expect(safeDriveFolderUrl(value)).toBe("#");
   });
 
-  it("clears fragment and key fields and hides file views while locked", () => {
+  it("hides file views while the source snapshot is stale or invalid", () => {
     const app = fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8");
-    expect(app).not.toMatch(/value\s*=\s*hashKey/);
-    expect(app).toMatch(/history\.replaceState\(null, "", `\$\{location\.pathname\}\$\{location\.search\}`\); unlock\(hashKey\)/);
-    expect(app).toMatch(/#access-key"\)\.value = ""/);
     expect(app).toMatch(/Files are hidden because the information is not current/);
     expect(app).toMatch(/if \(operatingState\.locked\) return/);
-    expect(app).toMatch(/Shared-link access/);
+    expect(app).toMatch(/Link-only access/);
   });
 });
 
